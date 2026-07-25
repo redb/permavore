@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Permavore — le potager adapté à ton jardin</title>
+  <meta name="description" content="Trouve les fruits et légumes adaptés à ta ville et à la surface de ton jardin. Que planter aujourd'hui ? Permavore te le dit." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B1%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="marque">🌱 Permavore</div>
+    <h1>Le potager fait pour ton jardin</h1>
+    <p>Indique ta ville et la surface disponible : on te propose les fruits et légumes adaptés, en mettant en avant ceux à <strong>planter maintenant</strong>.</p>
+    <div class="date-jour" id="date-jour">📅 …</div>
+  </header>
+
+  <div class="barre-compacte" id="barre-compacte" hidden>
+    <span class="bc-marque">🌱 Permavore</span>
+    <div class="bc-resume" id="bc-resume"></div>
+    <button class="btn secondaire" id="btn-modifier">✎ Modifier</button>
+  </div>
+
+  <section class="panneau">
+    <div class="panneau-inner">
+      <div class="reglages">
+        <div class="champ champ-ville">
+          <label for="ville">📍 Ta ville</label>
+          <input id="ville" type="text" placeholder="Ex. Rumilly, Nantes, Lyon…"
+                 autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" />
+          <div class="ac" id="ac" hidden></div>
+        </div>
+        <div class="champ">
+          <label for="surface">📐 Surface du jardin (m²)</label>
+          <input id="surface" type="number" min="1" max="10000" placeholder="Ex. 20" />
+        </div>
+        <div class="champ">
+          <label for="zone">🌍 Climat</label>
+          <select id="zone"></select>
+        </div>
+        <div class="champ geo-wrap">
+          <button class="btn geo" id="btn-geo" title="Me localiser">📡 Me localiser</button>
+          <button class="btn" id="btn-go">Voir</button>
+        </div>
+      </div>
+      <div class="zone-info">
+        <span class="badge-zone" id="badge-zone">🍃 Tempéré</span>
+        <span class="zone-note" id="zone-note">Climat de référence. Ajuste-le si besoin.</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="outils">
+    <input id="recherche" class="recherche" type="search" placeholder="🔍 Rechercher une plante (tomate, basilic, figuier…)" autocomplete="off" />
+    <div class="vue-toggle" role="group" aria-label="Affichage">
+      <button id="vue-liste" class="vbtn actif" title="Liste compacte">☰</button>
+      <button id="vue-cartes" class="vbtn" title="Cartes">▦</button>
+    </div>
+    <button class="mon-potager" id="mon-potager" hidden>🌱 Mon potager (0)</button>
+    <button class="btn-ajouter" id="btn-ajouter">➕ Ajouter</button>
+  </div>
+
+  <nav class="filtres" id="filtres" aria-label="Filtres"></nav>
+
+  <main>
+    <section class="section" id="section-now" hidden>
+      <div class="section-titre">
+        <h2>À planter maintenant</h2><span class="pastille" id="now-count">0</span>
+      </div>
+      <p class="section-sous">C'est le bon moment pour ces variétés dans ta zone, ce mois-ci.</p>
+      <div class="grille" id="grille-now"></div>
+    </section>
+
+    <section class="section" id="section-soon" hidden>
+      <div class="section-titre soon">
+        <h2>Bientôt (le mois prochain)</h2><span class="pastille" id="soon-count">0</span>
+      </div>
+      <div class="grille" id="grille-soon"></div>
+    </section>
+
+    <section class="section" id="section-autres">
+      <div class="section-titre"><h2>Autres variétés adaptées</h2></div>
+      <p class="section-sous" id="autres-sous">Toutes les cultures qui s'accommodent de ton climat.</p>
+      <div class="grille" id="grille-autres"></div>
+      <div class="vide" id="vide" hidden>Aucune variété ne correspond à ces filtres.</div>
+    </section>
+  </main>
+
+  <footer>
+    <p><strong>Permavore</strong> — sélecteur de cultures pour jardin nourricier.</p>
+    <p>Calendrier indicatif (France métropolitaine), à adapter à la météo réelle et à ton microclimat. Les liens marqués « Partenaire » peuvent être sponsorisés.</p>
+  </footer>
+
+  <!-- Modale détail -->
+  <div class="overlay" id="overlay">
+    <div class="modale" id="modale" role="dialog" aria-modal="true"></div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
