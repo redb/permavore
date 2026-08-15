@@ -1,0 +1,11 @@
+{
+  "name": "permavore",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "npx serve .",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check app.js && node --check data.js && node --check network.js && node --check network-core.mjs"
+  }
+}

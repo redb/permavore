@@ -16,6 +16,8 @@
 }
 
 * { box-sizing: border-box; }
+/* `hidden` doit toujours l'emporter sur un display: flex/grid de composant. */
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0;
@@ -207,6 +209,28 @@ body.configure .filtres { margin-top: 16px; }
   display: inline-block; font-size: 11px; font-weight: 700; color: var(--terre);
   background: #f0e7db; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
 }
+.tag-enracinee {
+  display: inline-block; font-size: 11px; font-weight: 700; color: var(--vert-fonce);
+  background: var(--vert-clair); padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+}
+.enracinement-option {
+  align-items: flex-start;
+  margin: 4px 0;
+  padding: 12px;
+  border: 1px solid var(--bord);
+  border-radius: 11px;
+  background: var(--vert-clair);
+}
+.enracinement-option label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.enracinement-option label span {
+  color: var(--texte-doux);
+  font-size: 12px;
+  line-height: 1.35;
+}
 
 /* ---------- Bouton adopter (coche) ---------- */
 .adopt {
@@ -245,6 +269,51 @@ body.configure .filtres { margin-top: 16px; }
   .lg-sub { display: none; }
   .ligne { gap: 9px; padding: 7px 10px; }
 }
+
+/* ---------- Bandeau lunaire ---------- */
+.bandeau-lune {
+  width: 100%; text-align: left; border: 1px solid #d8d3ea; border-radius: var(--radius);
+  background: linear-gradient(135deg, #f4f1fb, #eae6f7); color: #2f2a44;
+  padding: 12px 16px; box-shadow: var(--ombre); display: flex; align-items: center;
+  gap: 14px; flex-wrap: wrap;
+}
+.bandeau-lune:hover { border-color: #b9b0dd; }
+.lune-emoji { font-size: 32px; line-height: 1; }
+.lune-txt { flex: 1; min-width: 180px; }
+.lune-titre { font-weight: 800; font-size: 15px; }
+.lune-sous { font-size: 13px; color: #5b5470; margin-top: 2px; }
+.lune-jour {
+  font-size: 12.5px; font-weight: 800; background: #fff; color: #4a4266;
+  border: 1px solid #d8d3ea; padding: 5px 11px; border-radius: 999px; white-space: nowrap;
+}
+.lune-jour.match { background: var(--vert); color: #fff; border-color: var(--vert); }
+
+/* Badge "jour favorable" sur une plante */
+.badge-lune {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 800;
+  background: #efeafc; color: #4a3f7a; padding: 3px 8px; border-radius: 8px;
+}
+.badge-lune.on { background: var(--vert); color: #fff; }
+
+/* ---------- Ressources ---------- */
+.res-liste { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 0; }
+.res-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--bord); border-radius: 12px; background: #fff;
+}
+.res-item .res-emoji { font-size: 22px; }
+.res-item .res-nom { flex: 1; font-weight: 700; font-size: 14.5px; }
+.res-item .res-quand { font-size: 12.5px; color: var(--texte-doux); }
+.res-suppr { border: none; background: #fce8e6; color: #b03a2e; border-radius: 8px;
+  padding: 6px 10px; font-weight: 700; font-size: 12.5px; }
+.res-choix { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.res-choix button {
+  border: 1px solid var(--bord); background: #fff; border-radius: 12px; padding: 12px 10px;
+  text-align: left; font-size: 13.5px; font-weight: 600; color: var(--texte);
+}
+.res-choix button:hover { border-color: var(--vert); background: var(--vert-clair); }
+.res-choix .rc-emoji { font-size: 20px; display: block; margin-bottom: 3px; }
+.etape-ressource { border-left: 4px solid #b9a06a; }
 
 /* ---------- Sections ---------- */
 .section { max-width: 1080px; margin: 26px auto 0; padding: 0 16px; }
@@ -378,3 +447,40 @@ footer {
   color: var(--texte-doux); font-size: 13px; border-top: 1px solid var(--bord); text-align: center;
 }
 footer strong { color: var(--vert-fonce); }
+
+/* ---------- Prochaines étapes au potager ---------- */
+.etapes { display: flex; flex-direction: column; gap: 8px; }
+.etape-ligne {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--carte); border: 1px solid var(--bord);
+  border-radius: 12px; padding: 10px 14px;
+  font: inherit; color: var(--texte); box-shadow: var(--ombre);
+}
+.etape-ligne:hover { border-color: var(--vert); }
+.etape-ligne .etape-date {
+  flex: 0 0 92px; font-weight: 600; color: var(--vert-fonce); font-size: 13px;
+}
+.etape-ligne .etape-plante { flex: 0 0 auto; font-weight: 600; }
+.etape-ligne .etape-label { flex: 1; color: var(--texte-doux); font-size: 14px; }
+
+/* ---------- Suivi de culture (modale) ---------- */
+.bloc-suivi .suivi-date {
+  display: flex; align-items: center; gap: 10px; font-size: 14px; margin-bottom: 10px;
+}
+.bloc-suivi input[type="date"] {
+  font: inherit; padding: 6px 10px; border: 1px solid var(--bord);
+  border-radius: 8px; background: var(--carte); color: var(--texte);
+}
+.suivi-etapes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.suivi-etapes .etape { display: flex; gap: 10px; font-size: 14px; }
+.suivi-etapes .etape.passee { opacity: .55; }
+.suivi-etapes .etape-date { flex: 0 0 92px; font-weight: 600; color: var(--vert-fonce); font-size: 13px; }
+.suivi-etapes .etape-vide { color: var(--texte-doux); font-size: 13px; }
+.suivi-note { margin: 10px 0 0; font-size: 12px; color: var(--texte-doux); }
+
+@media (max-width: 560px) {
+  .etape-ligne { flex-wrap: wrap; gap: 6px 10px; }
+  .etape-ligne .etape-label { flex-basis: 100%; }
+}
+.suivi-etapes .etape-info { color: #8a6d1f; }

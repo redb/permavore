@@ -18,6 +18,8 @@ const state = {
   vue: "liste",              // "liste" (compact, par défaut) | "cartes"
   filtrePotager: false,      // n'afficher que mes plantes adoptées
   adoptees: new Set(),       // ids des plantes adoptées (persisté)
+  ressources: new Set(),     // ce que le jardinier possède (persisté)
+  dates: {},                 // id -> "AAAA-MM-JJ" date de semis/plantation (persisté)
 };
 
 // ---------- Persistance "Mon potager" ----------
@@ -33,6 +35,308 @@ function sauverAdoptees() {
   catch (e) { /* ignore */ }
 }
 function estAdoptee(id) { return state.adoptees.has(id); }
+
+// ---------- Mes ressources (ce que le jardinier possède) ----------
+const LS_RESSOURCES = "permavore.ressources";
+function chargerRessources() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LS_RESSOURCES) || "[]");
+    state.ressources = new Set(arr.filter(k => RESSOURCES_CATALOGUE[k]));
+  } catch (e) { state.ressources = new Set(); }
+}
+function sauverRessources() {
+  try { localStorage.setItem(LS_RESSOURCES, JSON.stringify([...state.ressources])); }
+  catch (e) { /* ignore */ }
+}
+// Quand cette ressource resservira-t-elle ? (« maintenant » ou prochain mois utile)
+function prochaineUtilisation(r) {
+  const mois = dateDuJour().getMonth() + 1;
+  if (r.mois.includes(mois)) return { maintenant: true, texte: "c'est le moment" };
+  for (let i = 1; i <= 12; i++) {
+    const m = ((mois - 1 + i) % 12) + 1;
+    if (r.mois.includes(m)) {
+      return { maintenant: false,
+        texte: i === 1 ? `dès ${moisNom(m)} (le mois prochain)` : `à partir de ${moisNom(m)}` };
+    }
+  }
+  return { maintenant: false, texte: "—" };
+}
+
+function basculerRessource(cle) {
+  if (state.ressources.has(cle)) state.ressources.delete(cle);
+  else state.ressources.add(cle);
+  sauverRessources();
+}
+
+// Suggestions proactives : quelle ressource utiliser, maintenant, et sur quoi.
+function suggestionsRessources() {
+  const mois = dateDuJour().getMonth() + 1;
+  const out = [];
+  state.ressources.forEach(cle => {
+    const r = RESSOURCES_CATALOGUE[cle];
+    if (!r || !r.mois.includes(mois)) return;
+    // Sur quelles plantes adoptées (ou à planter ce mois-ci) ça s'applique
+    const concernees = PLANTES.filter(p => {
+      let ok = false;
+      try { ok = r.cible(p); } catch (e) { ok = false; }
+      if (!ok) return false;
+      if (estAdoptee(p.id)) return true;
+      return r.auSemis && state._statut && state._statut(p) === "now";
+    }).slice(0, 4);
+    out.push({ cle, ...r, concernees });
+  });
+  return out;
+}
+
+// ---------- Dates de semis/plantation (persisté) ----------
+const LS_DATES = "permavore.dates.v1";
+const RE_DATE_ISO = /^\d{4}-\d{2}-\d{2}$/;
+function chargerDates() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(LS_DATES) || "{}");
+    if (!brut || typeof brut !== "object" || Array.isArray(brut)) return;
+    Object.entries(brut).forEach(([id, d]) => {
+      if (typeof d === "string" && RE_DATE_ISO.test(d)) state.dates[id] = d;
+    });
+  } catch (e) { /* stockage indispo : on ignore */ }
+}
+function sauverDates() {
+  try { localStorage.setItem(LS_DATES, JSON.stringify(state.dates)); }
+  catch (e) { /* ignore */ }
+}
+function dateISOAujourdhui() {
+  const d = dateDuJour();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function dateDepuisISO(iso) {
+  const [a, m, j] = iso.split("-").map(Number);
+  return new Date(a, m - 1, j);
+}
+function fmtDateCourte(date) {
+  const options = { day: "numeric", month: "long" };
+  if (date.getFullYear() !== dateDuJour().getFullYear()) options.year = "numeric";
+  return date.toLocaleDateString("fr-FR", options);
+}
+
+// ---------- Étapes de culture (prévision proactive) ----------
+// À partir de la date de semis/plantation, on estime : levée/reprise,
+// entretien (éclaircir, pailler) et début de récolte.
+// Récolte : « N à M semaines » dans la fiche → délai en jours ;
+// sinon un nom de mois (« Juillet → octobre ») → prochaine occurrence de ce mois.
+function delaiRecolteJours(plante) {
+  const texte = normaliseVille(plante.recolte);
+  const m = texte.match(/(\d+)\s*(?:a\s*(\d+)\s*)?semaines/);
+  if (m) {
+    const s1 = Number(m[1]), s2 = m[2] ? Number(m[2]) : s1;
+    return Math.round(((s1 + s2) / 2) * 7);
+  }
+  return null;
+}
+function moisRecolte(plante) {
+  const texte = normaliseVille(plante.recolte);
+  const index = MOIS.findIndex(mois => texte.startsWith(normaliseVille(mois)));
+  return index >= 0 ? index + 1 : null;
+}
+// Mois de FIN de récolte (« Juillet → octobre » → 10), sinon null.
+function moisFinRecolte(plante) {
+  const texte = normaliseVille(plante.recolte);
+  const morceaux = texte.split(/→|->|a fin|jusqu'a/);
+  if (morceaux.length < 2) return null;
+  const fin = morceaux[morceaux.length - 1].trim();
+  const index = MOIS.findIndex(mois => fin.startsWith(normaliseVille(mois)));
+  return index >= 0 ? index + 1 : null;
+}
+const LIBELLE_MODE = {
+  semis: "Semis",
+  plant: "Plantation du plant",
+  tubercule: "Plantation des tubercules",
+  caieu: "Plantation des caïeux",
+  rhizome: "Plantation du rhizome",
+};
+
+function etapesCulture(plante, iso) {
+  const debut = dateDepuisISO(iso);
+  const plus = jours => {
+    const d = new Date(debut);
+    d.setDate(d.getDate() + jours);
+    return d;
+  };
+  const mode = LIBELLE_MODE[plante.mode] ? plante.mode : "semis";
+  const etapes = [
+    { cle: "semis", emoji: "🌱", label: LIBELLE_MODE[mode], date: debut },
+  ];
+
+  // Levée : uniquement pour les plantes réellement semées, et uniquement si la
+  // durée est renseignée dans la base. Pas de délai générique inventé : un radis
+  // lève en 3 à 5 jours, un persil en 15 à 30 — la moyenne n'aurait aucun sens.
+  if (mode === "semis" && Array.isArray(plante.levee) && plante.levee.length === 2) {
+    const [min, max] = plante.levee;
+    etapes.push({
+      cle: "levee", emoji: "🌿",
+      label: min === max ? `Levée attendue (~${min} jours)`
+        : `Levée attendue (${min} à ${max} jours)`,
+      date: plus(min), dateFin: plus(max),
+    });
+    // Éclaircissage : seulement pour les plantes qui se démarient réellement.
+    // Les légumineuses (haricot, pois, fève) se sèment à l'écartement définitif.
+    if (plante.eclaircir === true) {
+      etapes.push({ cle: "eclaircir", emoji: "🧑‍🌾",
+        label: `Éclaircir à ${plante.espacement}`, date: plus(max + 10) });
+    }
+  }
+
+  const delai = delaiRecolteJours(plante);
+  if (delai) {
+    etapes.push({ cle: "recolte", emoji: "🧺", label: "Début de récolte (estimation)", date: plus(delai) });
+  } else {
+    const mois = moisRecolte(plante);
+    if (mois) {
+      const fin = moisFinRecolte(plante) || mois;
+      const moisMiseEnPlace = debut.getMonth() + 1;
+      if (moisDansFenetre(moisMiseEnPlace, { debut: mois, fin })) {
+        // Mise en place alors que la fenêtre de récolte est déjà ouverte : le
+        // calendrier de référence suppose une plantation en saison, il ne dit
+        // plus rien d'utile ici. On l'annonce plutôt que d'inventer une date.
+        etapes.push({
+          cle: "recolte", emoji: "🧺", sansDate: true,
+          label: `Mise en place hors calendrier — récolte de référence ${moisNom(mois)} → ${moisNom(fin)}`,
+          date: debut,
+        });
+      } else {
+        // Sinon : prochaine ouverture de la fenêtre.
+        const annee = moisMiseEnPlace <= mois ? debut.getFullYear() : debut.getFullYear() + 1;
+        etapes.push({ cle: "recolte", emoji: "🧺",
+          label: "Début de récolte (estimation)", date: new Date(annee, mois - 1, 1) });
+      }
+    }
+  }
+  return etapes;
+}
+// Liste des étapes à venir (ou récentes) pour toutes les plantes datées.
+function prochainesEtapes(horizonJours = 90) {
+  const aujourdhui = dateDuJour();
+  aujourdhui.setHours(0, 0, 0, 0);
+  const limite = new Date(aujourdhui);
+  limite.setDate(limite.getDate() + horizonJours);
+  const liste = [];
+  Object.entries(state.dates).forEach(([id, iso]) => {
+    if (!estAdoptee(id)) return;
+    const plante = PLANTES.find(p => p.id === id);
+    if (!plante) return;
+    etapesCulture(plante, iso).forEach(etape => {
+      if (etape.cle === "semis") return; // déjà fait, c'est la date saisie
+      if (etape.sansDate) return;        // information, pas une échéance
+      if (etape.date >= aujourdhui && etape.date <= limite) {
+        liste.push({ plante, ...etape });
+      } else if (etape.cle === "recolte" && etape.date < aujourdhui) {
+        // Récolte commencée : encore en cours si le mois de fin n'est pas passé.
+        const fin = moisFinRecolte(plante);
+        if (fin) {
+          const anneeFin = fin >= etape.date.getMonth() + 1
+            ? etape.date.getFullYear() : etape.date.getFullYear() + 1; // fenêtre à cheval sur l'année
+          const finRecolte = new Date(anneeFin, fin, 0); // dernier jour du mois de fin
+          if (finRecolte >= aujourdhui) {
+            liste.push({ plante, cle: "recolte", emoji: "🧺",
+              label: `Récolte en cours (jusqu'à fin ${moisNom(fin)})`, date: aujourdhui });
+          }
+        }
+      }
+    });
+  });
+  liste.sort((a, b) => a.date - b.date);
+  return liste;
+}
+// Accesseurs exposés au module réseau (network.js) : les `const` d'un script
+// classique ne sont pas sur window, contrairement aux déclarations de fonction.
+function dateSemisPlante(id) {
+  return state.dates[id] || "";
+}
+function zoneCourante() {
+  return state.zone;
+}
+
+// Prévision « porte-graines » : QUAND les graines seront récoltables, ce qui est
+// une date distincte de la récolte alimentaire. Règle botanique de base :
+//   annuelle    → porte-graines laissé mûrir jusqu'au bout de la fenêtre de récolte ;
+//   bisannuelle → pas de graines la 1ʳᵉ année, montée en graines l'été suivant ;
+//   vivace      → hors de ce modèle simple.
+// Volontairement indicatif : le calendrier fin dépend de la variété et du
+// protocole, qui font foi (cf. Réseau Semences Paysannes).
+function previsionSemences(plante, iso) {
+  if (!iso || !RE_DATE_ISO.test(iso)) return null;
+  const debut = dateDepuisISO(iso);
+  if (plante.cycle === "vivace") return null;
+
+  if (plante.cycle === "bisannuelle") {
+    const annee = debut.getFullYear() + 1;
+    return {
+      date: new Date(annee, 5, 1),                 // juin de l'année suivante
+      label: `Montée en graines vers l'été ${annee}`,
+      note: "Bisannuelle : elle ne fait pas de graines la première année. "
+        + "Les pieds porte-graines doivent passer l'hiver en place.",
+    };
+  }
+  const fin = moisFinRecolte(plante) || moisRecolte(plante);
+  if (!fin) return null;
+  const annee = fin >= debut.getMonth() + 1 ? debut.getFullYear() : debut.getFullYear() + 1;
+  return {
+    date: new Date(annee, fin - 1, 15),
+    label: `Graines récoltables vers ${moisNom(fin)} ${annee}`,
+    note: "Laisser les fruits porte-graines mûrir au-delà du stade de consommation, "
+      + "sur des pieds sains et conformes.",
+  };
+}
+
+function definirDate(id, iso) {
+  if (iso && RE_DATE_ISO.test(iso)) state.dates[id] = iso;
+  else delete state.dates[id];
+  sauverDates();
+}
+
+// ---------- Préférences du jardin (stockage local, sans coordonnées) ----------
+const LS_JARDIN = "permavore.jardin.v1";
+function chargerPreferencesJardin() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(LS_JARDIN) || "null");
+    if (!brut || typeof brut !== "object" || Array.isArray(brut)) return;
+
+    const ville = typeof brut.ville === "string" ? brut.ville.trim().slice(0, 120) : "";
+    const surface = Number(brut.surface);
+    const zone = typeof brut.zone === "string" && Object.hasOwn(ZONES, brut.zone)
+      ? brut.zone : "tempere";
+    const vue = brut.vue === "cartes" ? "cartes" : "liste";
+
+    state.surface = Number.isInteger(surface) && surface >= 1 && surface <= 10000
+      ? surface : null;
+    state.zone = zone;
+    state.vue = vue;
+    if (typeof brut.categorie === "string"
+      && FILTRES_CAT.some(f => f.k === brut.categorie)) state.categorie = brut.categorie;
+    if (typeof brut.cycle === "string"
+      && (brut.cycle === "tous" || FILTRES_CYCLE.some(f => f.k === brut.cycle))) state.cycle = brut.cycle;
+    state.petitsEspaces = brut.petitsEspaces === true;
+    state._prefsConnues = Boolean(ville || state.surface);
+    $("#ville").value = ville;
+    $("#surface").value = state.surface || "";
+  } catch (erreur) {
+    journaliserAvertissement("preferences_jardin_illisibles", { message: erreur.message });
+  }
+}
+function sauverPreferencesJardin() {
+  try {
+    localStorage.setItem(LS_JARDIN, JSON.stringify({
+      ville: $("#ville")?.value.trim().slice(0, 120) || "",
+      surface: state.surface,
+      zone: state.zone,
+      vue: state.vue,
+      categorie: state.categorie,
+      cycle: state.cycle,
+      petitsEspaces: state.petitsEspaces,
+    }));
+  } catch (erreur) {
+    journaliserAvertissement("preferences_jardin_echec", { message: erreur.message });
+  }
+}
 
 // ---------- Plantes ajoutées par l'utilisateur (localStorage) ----------
 const LS_PLANTES = "permavore.plantes";
@@ -66,12 +370,18 @@ function supprimerPlante(id) {
   const i = PLANTES.findIndex(p => p.id === id);
   if (i >= 0) PLANTES.splice(i, 1);
   state.adoptees.delete(id); sauverAdoptees();
+  definirDate(id, null);
   sauverPlantesPerso();
   fermerModale(); rendre();
 }
 function basculerAdoption(id) {
-  if (state.adoptees.has(id)) state.adoptees.delete(id);
-  else state.adoptees.add(id);
+  if (state.adoptees.has(id)) {
+    state.adoptees.delete(id);
+    definirDate(id, null);                    // on oublie la date associée
+  } else {
+    state.adoptees.add(id);
+    if (!state.dates[id]) definirDate(id, dateISOAujourdhui()); // date du jour par défaut, modifiable dans la fiche
+  }
   sauverAdoptees();
   majMonPotager();
 }
@@ -183,6 +493,7 @@ function validerPlantePerso(brut) {
       frileux: Boolean(brut.frileux), semis: brut.semis, recolte,
       court, long, conseils: brut.conseils.map(conseil => conseil.trim()),
       lien, sponsorise: Boolean(brut.sponsorise && lien),
+      enracinee: Boolean(brut.enracinee),
     },
   };
 }
@@ -245,9 +556,18 @@ async function requeteJSON(url, options = {}) {
   }
 }
 
-// Décale une fenêtre [debut, fin] selon la zone. Renvoie {debut, fin}.
-function fenetreZone([d, f], zone) {
+// Décalage climatique applicable à UNE plante : les frileuses suivent les
+// dernières gelées (décalage fort), les rustiques la température du sol (faible).
+function decalageZone(zone, plante) {
   const z = ZONES[zone] || ZONES.tempere;
+  const bloc = plante && plante.frileux ? z.frileux : z.rustique;
+  return bloc && Number.isFinite(bloc.debut) && Number.isFinite(bloc.fin)
+    ? bloc : { debut: z.debut, fin: z.fin };   // repli sur l'ancien décalage global
+}
+
+// Décale une fenêtre [debut, fin] selon la zone (et la plante si fournie).
+function fenetreZone([d, f], zone, plante) {
+  const z = decalageZone(zone, plante);
   const wrapOrigine = f < d;                 // fenêtre à cheval sur l'année ?
   let deb = d + z.debut;
   let fin = f + z.fin;
@@ -272,7 +592,7 @@ function moisDansFenetre(mois, { debut, fin }) {
 
 // Statut de plantation pour la zone courante : "now" | "soon" | "later"
 function statutPlantation(plante, zone, moisCourant) {
-  const fenetres = plante.semis.map(w => fenetreZone(w, zone));
+  const fenetres = plante.semis.map(w => fenetreZone(w, zone, plante));
   if (fenetres.some(f => moisDansFenetre(moisCourant, f))) return "now";
   const moisProchain = (moisCourant % 12) + 1;
   if (fenetres.some(f => moisDansFenetre(moisProchain, f))) return "soon";
@@ -282,7 +602,7 @@ function statutPlantation(plante, zone, moisCourant) {
 // Texte lisible de la fenêtre de semis pour la zone
 function texteFenetre(plante, zone) {
   return plante.semis.map(w => {
-    const f = fenetreZone(w, zone);
+    const f = fenetreZone(w, zone, plante);
     return f.debut === f.fin ? moisNom(f.debut)
       : `${moisNom(f.debut)} → ${moisNom(f.fin)}`;
   }).join(" · ");
@@ -297,6 +617,21 @@ function adapteeZone(plante, zone) {
 // Estimation du nombre de pieds pour une surface dédiée
 function nbPieds(plante, surfaceDediee) {
   return Math.max(1, Math.round(plante.densite * surfaceDediee));
+}
+
+// Densité lisible. Un demi-pied de figuier n'existe pas : sous 1 pied/m² on
+// inverse le rapport et on annonce la surface qu'il faut par pied.
+function nombreFR(n) {
+  return Number(n).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+}
+function textePieds(n) {
+  return `${nombreFR(n)} pied${n >= 2 ? "s" : ""}`;
+}
+function texteDensite(plante) {
+  const d = plante.densite;
+  if (d >= 1) return `${nombreFR(d)} pied${d >= 2 ? "s" : ""}/m²`;
+  const m2 = Math.round(1 / d);
+  return `1 pied pour ${nombreFR(m2)} m²`;
 }
 
 // Lien d'achat : 1) lien propre à la plante, 2) partenaire global, 3) recherche web
@@ -412,12 +747,60 @@ function choisirVille(r) {
   state.villeCoords = { lat: r.lat, lng: r.lng };
   hideAc();
   const z = zoneDepuisVille(r.nom) || zoneDepuisCoords(r.lat, r.lng);
-  majZone(z, `📍 ${r.nom}${r.cp ? " (" + r.cp + ")" : ""}`);
+  const source = `📍 ${r.nom}${r.cp ? " (" + r.cp + ")" : ""}`;
+  majZone(z, source);
+  sauverPreferencesJardin();
+  // L'altitude arrive après coup : elle peut basculer la zone en montagne.
+  appliquerAltitude(r.lat, r.lng, z, source);
+}
+
+// Applique l'altitude sans bloquer l'affichage. Une commune du dictionnaire
+// déjà classée « montagne » n'est jamais rétrogradée par l'altitude.
+async function appliquerAltitude(lat, lng, zoneEstimee, source) {
+  const affine = await affinerZoneParAltitude(lat, lng, zoneEstimee);
+  if (!affine) return;
+  if (state.villeCoords && (state.villeCoords.lat !== lat || state.villeCoords.lng !== lng)) return;
+  const zoneFinale = zoneEstimee === "montagne" ? "montagne" : affine.zone;
+  majZone(zoneFinale, `${source} · ${affine.note}`);
 }
 
 function surlignerAc() {
   document.querySelectorAll("#ac .ac-item").forEach((el, i) =>
     el.classList.toggle("actif", i === acIndex));
+}
+
+// --- Altitude via l'API altimétrie IGN (Géoplateforme, gratuite, sans clé) ---
+// Le géocodage ne renvoie que la commune : deux communes voisines peuvent être
+// à 300 m et à 1 200 m. On interroge donc l'altitude du point avant de trancher.
+// Borné + repli null : sans réponse, on garde la zone déduite de la position.
+const ALTITUDE_MONTAGNE = 900;    // m — au-dessus, saison courte et gel tardif
+const ALTITUDE_PIEMONT = 600;     // m — entre les deux, on prévient sans forcer
+
+async function altitudePoint(lat, lng) {
+  const url = `https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json`
+    + `?lon=${encodeURIComponent(lng)}&lat=${encodeURIComponent(lat)}`
+    + `&resource=ign_rge_alti_wld`;
+  const reponse = await requeteJSON(url, { cacheMs: 24 * 60 * 60 * 1000 });
+  const point = reponse.ok && Array.isArray(reponse.data.elevations)
+    ? reponse.data.elevations[0] : null;
+  const z = point && Number(point.z);
+  // L'IGN renvoie -99999 hors emprise : à écarter explicitement.
+  if (!Number.isFinite(z) || z < -100 || z > 5000) return null;
+  return z;
+}
+
+// Affine la zone d'après l'altitude. Renvoie {zone, note} ou null si sans effet.
+async function affinerZoneParAltitude(lat, lng, zoneEstimee) {
+  const alt = await altitudePoint(lat, lng);
+  if (alt === null) return null;
+  const altArrondie = Math.round(alt);
+  if (alt >= ALTITUDE_MONTAGNE) {
+    return { zone: "montagne", note: `⛰️ ${altArrondie} m d'altitude` };
+  }
+  if (alt >= ALTITUDE_PIEMONT) {
+    return { zone: zoneEstimee, note: `⛰️ ${altArrondie} m — surveille les gelées tardives` };
+  }
+  return { zone: zoneEstimee, note: `${altArrondie} m d'altitude` };
 }
 
 function zoneDepuisCoords(lat, lng) {
@@ -450,15 +833,15 @@ function carteHTML(plante) {
   const c = CYCLES[plante.cycle], d = DIFFICULTES[plante.diff];
   const enc = ENCOMBREMENTS[plante.encombrement], sol = SOLEILS[plante.soleil];
   const statut = state._statut ? state._statut(plante) : "later";
-  const photo = estImageValide(plante.photo) ? urlExterneSure(plante.photo) : "";
+  const photo = photoPlante(plante);
   const ruban = statut === "now" ? `<span class="ruban-now">🌱 À planter</span>`
     : statut === "soon" ? `<span class="ruban-soon">⏳ Bientôt</span>` : "";
   const imgTag = photo
     ? `<img src="${echapperHTML(photo)}" alt="${echapperHTML(plante.nom)}" loading="lazy" onerror="this.remove()" />` : "";
   const spons = estSponsorise(plante) ? `<span class="spons">Partenaire ✦</span>` : "";
   const surf = state.surface
-    ? `<span>🪴 ≈ ${nbPieds(plante, surfaceDediee(plante, state.surface))} pieds conseillés</span>`
-    : `<span>🪴 ${plante.densite} pied${plante.densite >= 2 ? "s" : ""}/m²</span>`;
+    ? `<span>🪴 ≈ ${textePieds(nbPieds(plante, surfaceDediee(plante, state.surface)))} conseillé${nbPieds(plante, surfaceDediee(plante, state.surface)) >= 2 ? "s" : ""}</span>`
+    : `<span>🪴 ${texteDensite(plante)}</span>`;
 
   return `
     <div class="carte-img" style="background:${fondCarte(plante)}">
@@ -498,9 +881,9 @@ function creerLigne(plante) {
     : `🌱 ${texteFenetre(plante, state.zone)}`;
   const surf = state.surface
     ? `🪴 ≈ ${nbPieds(plante, surfaceDediee(plante, state.surface))} pieds`
-    : `🪴 ${plante.densite}/m²`;
+    : `🪴 ${texteDensite(plante)}`;
   const on = estAdoptee(plante.id);
-  const photo = estImageValide(plante.photo) ? urlExterneSure(plante.photo) : "";
+  const photo = photoPlante(plante);
 
   const ligne = el("div", "ligne" + (on ? " adoptee" : ""));
   ligne.innerHTML = `
@@ -563,7 +946,7 @@ function ouvrirModale(plante) {
   const c = CYCLES[plante.cycle], d = DIFFICULTES[plante.diff];
   const enc = ENCOMBREMENTS[plante.encombrement], sol = SOLEILS[plante.soleil];
   const statut = state._statut(plante);
-  const photo = estImageValide(plante.photo) ? urlExterneSure(plante.photo) : "";
+  const photo = photoPlante(plante);
   const badge = statut === "now" ? `<span class="cal-badge">à planter maintenant</span>` : "";
   const imgTag = photo
     ? `<img src="${echapperHTML(photo)}" alt="${echapperHTML(plante.nom)}" onerror="this.remove()" />` : "";
@@ -573,9 +956,9 @@ function ouvrirModale(plante) {
     const dediee = surfaceDediee(plante, state.surface);
     calc = `<p class="calc-res">Pour ton jardin de <strong>${state.surface} m²</strong>, en lui consacrant
       ~${fmtSurface(dediee)} m² (une portion raisonnable), tu peux viser
-      <strong>${nbPieds(plante, dediee)} pied(s)</strong> — densité ${plante.densite}/m².</p>`;
+      <strong>${textePieds(nbPieds(plante, dediee))}</strong> — ${texteDensite(plante)}.</p>`;
   } else {
-    calc = `<p class="calc-res">Densité : <strong>${plante.densite}</strong> pied(s)/m².
+    calc = `<p class="calc-res">Densité : <strong>${texteDensite(plante)}</strong>.
       Renseigne la surface de ton jardin pour une estimation personnalisée.</p>`;
   }
 
@@ -586,7 +969,8 @@ function ouvrirModale(plante) {
       <span class="emoji">${echapperHTML(plante.emoji)}</span>${imgTag}
     </div>
     <div class="modale-corps">
-      <h2>${echapperHTML(plante.nom)}${plante.perso ? `<span class="tag-perso">Ajoutée par toi</span>` : ""}</h2>
+      <h2>${echapperHTML(plante.nom)}${plante.perso ? `<span class="tag-perso">Ajoutée par toi</span>` : ""}${
+        plante.enracinee ? `<span class="tag-enracinee">🌱 Enracinée</span>` : ""}</h2>
       <p class="latin">${echapperHTML(plante.latin)} — ${CATEGORIES[plante.cat].label}</p>
       <div class="modale-pictos">
         <span class="picto" title="${c.desc}">${c.picto} ${c.label}</span>
@@ -607,6 +991,16 @@ function ouvrirModale(plante) {
         ${calc}
       </div>
 
+      ${estAdoptee(plante.id) ? `
+      <div class="bloc bloc-suivi">
+        <h4>📆 Suivi de culture</h4>
+        <label class="suivi-date">Semé / planté le
+          <input type="date" id="suivi-date" value="${echapperHTML(state.dates[plante.id] || "")}" />
+        </label>
+        <ul class="suivi-etapes" id="suivi-etapes"></ul>
+        <p class="suivi-note">Estimations indicatives, à ajuster à la météo réelle.</p>
+      </div>` : ""}
+
       <div class="bloc">
         <h4>🧭 Fiche technique</h4>
         <div class="fiche">
@@ -614,7 +1008,7 @@ function ouvrirModale(plante) {
           <span class="k">Difficulté</span><span class="v">${d.picto} ${d.label}</span>
           <span class="k">Exposition</span><span class="v">${sol.picto} ${sol.label}</span>
           <span class="k">Encombrement</span><span class="v">${enc.picto} ${enc.label}</span>
-          <span class="k">Densité</span><span class="v">${plante.densite} pied(s)/m²</span>
+          <span class="k">Densité</span><span class="v">${texteDensite(plante)}</span>
           <span class="k">Espacement</span><span class="v">${echapperHTML(plante.espacement)}</span>
         </div>
       </div>
@@ -630,6 +1024,44 @@ function ouvrirModale(plante) {
     </div>`;
 
   modale.querySelector(".fermer").addEventListener("click", fermerModale);
+
+  // Suivi de culture : liste des étapes + changement de date
+  const champDate = modale.querySelector("#suivi-date");
+  if (champDate) {
+    const majEtapes = () => {
+      const ul = modale.querySelector("#suivi-etapes");
+      if (!ul) return;
+      ul.replaceChildren();
+      const iso = state.dates[plante.id];
+      if (!iso) {
+        const li = el("li", "etape-vide");
+        li.textContent = "Renseigne la date pour prévoir les étapes.";
+        ul.appendChild(li);
+        return;
+      }
+      const aujourdhui = dateDuJour(); aujourdhui.setHours(0, 0, 0, 0);
+      etapesCulture(plante, iso).forEach(etape => {
+        if (etape.sansDate) {
+          const li = el("li", "etape etape-info");
+          li.innerHTML = `<span class="etape-date">⚠️</span>
+            ${etape.emoji} ${echapperHTML(etape.label)}`;
+          ul.appendChild(li);
+          return;
+        }
+        const li = el("li", etape.date < aujourdhui ? "etape passee" : "etape");
+        li.innerHTML = `<span class="etape-date">${fmtDateCourte(etape.date)}</span>
+          ${etape.emoji} ${echapperHTML(etape.label)}${etape.date < aujourdhui ? " ✓" : ""}`;
+        ul.appendChild(li);
+      });
+    };
+    champDate.addEventListener("change", () => {
+      definirDate(plante.id, champDate.value);
+      majEtapes();
+      rendre();
+    });
+    majEtapes();
+  }
+
   const bs = modale.querySelector("#btn-suppr-perso");
   if (bs) bs.addEventListener("click", () => {
     if (confirm(`Supprimer « ${plante.nom} » de ta base ?`)) supprimerPlante(plante.id);
@@ -681,6 +1113,13 @@ function ouvrirFormAjout(prefill = "") {
         <div class="fchamp full"><label>Description longue</label><textarea id="f-long" placeholder="Facultatif"></textarea></div>
         <div class="fchamp full"><label>Conseils (un par ligne)</label><textarea id="f-conseils" placeholder="Un conseil par ligne"></textarea></div>
         <div class="fchamp full"><label>Lien d'achat (affilié possible)</label><input id="f-lien" placeholder="https://… (facultatif)" /></div>
+        <div class="fchamp inline full enracinement-option">
+          <input id="f-enracinee" type="checkbox" />
+          <label for="f-enracinee">
+            <strong>🌱 J’ai enraciné cette plante</strong>
+            <span>Elle pousse déjà chez moi. Cela ne publie pas encore d’offre de graines.</span>
+          </label>
+        </div>
         <div class="fchamp inline full"><input id="f-frileux" type="checkbox" /><label for="f-frileux">Frileuse (sensible au gel — exclue en montagne)</label></div>
         <div class="fchamp inline full"><input id="f-sponsorise" type="checkbox" /><label for="f-sponsorise">Lien sponsorisé (badge « Partenaire »)</label></div>
       </div>
@@ -711,6 +1150,25 @@ function ouvrirFormAjout(prefill = "") {
   $("#overlay").classList.add("ouvert");
   document.body.style.overflow = "hidden";
   $("#f-nom").focus();
+
+  // Auto-remplissage automatique : si un nom est déjà connu (recherche restée
+  // sans résultat), on interroge Wikipédia sans attendre de clic. Non bloquant,
+  // et le bouton reste disponible pour relancer après correction du nom.
+  if (prefill.trim()) autoRemplirFiche();
+  // Saisie manuelle : on lance dès que le nom se stabilise, une seule fois pour
+  // ne pas écraser ce que l'utilisateur est en train d'écrire.
+  let autoTimer = null, autoDejaFait = Boolean(prefill.trim());
+  $("#f-nom").addEventListener("input", () => {
+    if (autoDejaFait) return;
+    clearTimeout(autoTimer);
+    const nom = $("#f-nom").value.trim();
+    if (nom.length < 3) return;
+    autoTimer = setTimeout(() => {
+      if ($("#f-nom").value.trim() !== nom) return;   // encore en train de taper
+      autoDejaFait = true;
+      autoRemplirFiche();
+    }, 900);
+  });
 }
 
 // Auto-remplissage de la fiche depuis Wikipédia (nom → résumé + photo + nom latin).
@@ -753,6 +1211,20 @@ async function nomLatinWikidata(titrePage) {
   return typeof val === "string" ? val : "";
 }
 
+// Wikipédia renvoie parfois une vignette inutilisable (.ogg/.ogv/.svg d'un média,
+// ou pas de vignette du tout). Repli : API pageimages, qui rend une vraie image
+// matricielle. Renvoie "" si rien d'exploitable — jamais une URL non affichable.
+async function fetchImageWiki(titrePage) {
+  const url = `https://fr.wikipedia.org/w/api.php?action=query&prop=pageimages`
+    + `&piprop=thumbnail&pithumbsize=800&redirects=1&format=json&origin=*`
+    + `&titles=${encodeURIComponent(titrePage)}`;
+  const data = await fetchJSON(url);
+  const pages = data && data.query && data.query.pages;
+  const page = pages && Object.values(pages)[0];
+  const src = page && page.thumbnail && page.thumbnail.source;
+  return src && estImageValide(src) ? src : "";
+}
+
 async function autoRemplirFiche() {
   const nom = $("#f-nom").value.trim();
   const statut = $("#f-auto-statut");
@@ -772,19 +1244,87 @@ async function autoRemplirFiche() {
   }
   const extrait = data.extract || "";
   const g = id => $("#f-" + id);
-  if (data.thumbnail && data.thumbnail.source && estImageValide(data.thumbnail.source)) {
-    g("photo").value = data.thumbnail.source; g("photo").style.borderColor = "";
-  }
+  const titrePage = (data.titles && data.titles.canonical) || nom;
+
+  // Photo : vignette du résumé si exploitable, sinon image originale, sinon
+  // repli pageimages (cas d'une vignette .ogg/.ogv/.svg non affichable).
+  let photo = "";
+  const candidats = [data.thumbnail && data.thumbnail.source,
+                     data.originalimage && data.originalimage.source];
+  for (const c of candidats) { if (c && estImageValide(c)) { photo = c; break; } }
+  if (!photo) photo = await fetchImageWiki(titrePage);
+  if (photo) { g("photo").value = photo; g("photo").style.borderColor = ""; }
+
   if (!g("court").value.trim()) g("court").value = (extrait.split(/(?<=[.!?])\s/)[0] || "").slice(0, 140);
   if (!g("long").value.trim()) g("long").value = extrait;
 
-  const titrePage = (data.titles && data.titles.canonical) || nom;
   const latin = await nomLatinWikidata(titrePage);
   if (latin && !g("latin").value.trim()) g("latin").value = latin;
 
-  statut.textContent = latin
-    ? "✓ Rempli depuis Wikipédia + Wikidata — relis avant d'enregistrer."
-    : "✓ Rempli depuis Wikipédia (nom latin non trouvé sur Wikidata) — relis avant d'enregistrer.";
+  const manques = [];
+  if (!latin) manques.push("nom latin");
+  if (!photo) manques.push("photo");
+  statut.textContent = manques.length
+    ? `✓ Rempli depuis Wikipédia (${manques.join(" et ")} introuvable${manques.length > 1 ? "s" : ""}`
+      + ` — l'emoji sert d'illustration) — relis avant d'enregistrer.`
+    : "✓ Rempli depuis Wikipédia + Wikidata (texte, nom latin, photo) — relis avant d'enregistrer.";
+}
+
+// ---------- Photos manquantes : récupération automatique (Wikipédia) ----------
+// Quatre plantes de la base n'ont pas de `photo:` (fève, ail, figuier, gingembre).
+// Plutôt que de figer quatre URL à la main — qui casseront le jour où le fichier
+// Commons sera renommé — on récupère la vignette au premier affichage et on la
+// met en cache localement. Vaut pour toute plante ajoutée sans photo.
+const LS_PHOTOS = "permavore.photos.v1";
+const PHOTOS_CACHE_MS = 30 * 24 * 60 * 60 * 1000;   // 30 jours
+let photosCache = {};
+let photosEnAttente = new Set();
+
+function chargerCachePhotos() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(LS_PHOTOS) || "{}");
+    if (brut && typeof brut === "object" && !Array.isArray(brut)) photosCache = brut;
+  } catch (e) { /* stockage indispo */ }
+}
+function sauverCachePhotos() {
+  try { localStorage.setItem(LS_PHOTOS, JSON.stringify(photosCache)); }
+  catch (e) { /* ignore */ }
+}
+// Photo effective d'une plante : celle de la base, sinon celle retrouvée en cache.
+function photoPlante(plante) {
+  if (estImageValide(plante.photo) && plante.photo) return urlExterneSure(plante.photo);
+  const entree = photosCache[plante.id];
+  if (entree && entree.url && estImageValide(entree.url)) return urlExterneSure(entree.url);
+  return "";
+}
+// Faut-il (re)chercher une photo pour cette plante ?
+function photoARechercher(plante) {
+  if (plante.photo) return false;
+  const entree = photosCache[plante.id];
+  if (!entree) return true;
+  return Date.now() - (entree.quand || 0) > PHOTOS_CACHE_MS;   // on retente après expiration
+}
+async function completerPhotosManquantes() {
+  const cibles = PLANTES.filter(p => photoARechercher(p) && !photosEnAttente.has(p.id)).slice(0, 8);
+  if (!cibles.length) return;
+  cibles.forEach(p => photosEnAttente.add(p.id));
+  let trouvee = false;
+  for (const plante of cibles) {
+    // Le nom latin cible l'espèce sans ambiguïté ; le nom courant sert de repli.
+    const requetes = [plante.latin, plante.nom].filter(t => t && t !== "—");
+    let url = "";
+    for (const titre of requetes) {
+      const data = await fetchWikipedia(titre);
+      const source = data && !data.notFound && data.type !== "disambiguation"
+        && data.thumbnail && data.thumbnail.source;
+      if (source && estImageValide(source)) { url = source; break; }
+    }
+    photosCache[plante.id] = { url, quand: Date.now() };
+    if (url) trouvee = true;
+    photosEnAttente.delete(plante.id);
+  }
+  sauverCachePhotos();
+  if (trouvee) rendre();
 }
 
 // Rejette les fichiers non-image (ex. .ogg/.ogv audio de prononciation Wikipédia,
@@ -838,6 +1378,7 @@ function enregistrerPlante() {
     encombrement: g("enc").value, soleil: g("soleil").value,
     densite: +g("densite").value || 1, espacement: g("espacement").value.trim() || "—",
     frileux: g("frileux").checked,
+    enracinee: g("enracinee").checked,
     semis: [[deb, fin]], recolte: g("recolte").value.trim() || "—",
     court: g("court").value.trim() || "Plante ajoutée par toi.",
     long: g("long").value.trim() || g("court").value.trim() || "Plante ajoutée par toi.",
@@ -852,10 +1393,50 @@ function enregistrerPlante() {
   const p = resultat.plante;
   PLANTES.push(p);
   sauverPlantesPerso();
-  fermerModale();
   state.recherche = ""; $("#recherche").value = "";
   rendre();
-  ouvrirModale(p);
+  demanderSiPlantee(p);           // « tu l'as déjà en terre, ou pas encore ? »
+}
+
+// Après l'ajout d'une plante : est-elle déjà en terre ? Si oui, on l'adopte et on
+// enregistre la date pour alimenter les prochaines étapes ; sinon on la garde en base.
+function demanderSiPlantee(p) {
+  const auj = dateDuJour().toISOString().slice(0, 10);
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="modale-img" style="background:${fondCarte(p)}">
+      <span class="emoji">${p.emoji}</span>${photoPlante(p)
+        ? `<img src="${echapperHTML(photoPlante(p))}" alt="" onerror="this.remove()">` : ""}
+    </div>
+    <div class="modale-corps">
+      <h2>${echapperHTML(p.nom)} ajoutée ✅</h2>
+      <p class="latin">Elle fait maintenant partie de ta base.</p>
+      <div class="bloc">
+        <h4>🌱 Tu l'as déjà en terre ?</h4>
+        <p style="margin:0 0 12px;font-size:14px">Si oui, je la mets dans « Mon potager »
+          et je te préviendrai pour l'arrosage, l'entretien et la récolte.</p>
+        <div class="fchamp" id="bloc-date">
+          <label for="q-date">Date de plantation</label>
+          <input id="q-date" type="date" value="${auj}" max="${auj}" />
+        </div>
+        <div class="form-actions">
+          <button class="btn secondaire" id="q-non">Pas encore</button>
+          <button class="btn" id="q-oui">✓ Oui, elle est plantée</button>
+        </div>
+      </div>
+    </div>`;
+
+  const fin = () => { fermerModale(); rendre(); ouvrirModale(p); };
+  $("#modale").querySelector(".fermer").addEventListener("click", fin);
+  $("#q-non").addEventListener("click", fin);
+  $("#q-oui").addEventListener("click", () => {
+    state.adoptees.add(p.id); sauverAdoptees();
+    const d = $("#q-date").value;
+    if (d && state.dates) { state.dates[p.id] = d; sauverDates && sauverDates(); }
+    fin();
+  });
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
 }
 
 // ---------- Filtres ----------
@@ -877,7 +1458,7 @@ function construireFiltres() {
   nav.innerHTML = "";
   FILTRES_CAT.forEach(f => {
     const chip = el("button", "chip" + (state.categorie === f.k ? " actif" : ""), f.label);
-    chip.addEventListener("click", () => { state.categorie = f.k; rendre(); });
+    chip.addEventListener("click", () => { state.categorie = f.k; sauverPreferencesJardin(); rendre(); });
     nav.appendChild(chip);
   });
   const sep1 = el("span", null, "&nbsp;");
@@ -885,11 +1466,11 @@ function construireFiltres() {
   FILTRES_CYCLE.forEach(f => {
     const actif = state.cycle === f.k;
     const chip = el("button", "chip" + (actif ? " actif" : ""), f.label);
-    chip.addEventListener("click", () => { state.cycle = actif ? "tous" : f.k; rendre(); });
+    chip.addEventListener("click", () => { state.cycle = actif ? "tous" : f.k; sauverPreferencesJardin(); rendre(); });
     nav.appendChild(chip);
   });
   const chipPe = el("button", "chip" + (state.petitsEspaces ? " actif" : ""), "📦 Petits espaces");
-  chipPe.addEventListener("click", () => { state.petitsEspaces = !state.petitsEspaces; rendre(); });
+  chipPe.addEventListener("click", () => { state.petitsEspaces = !state.petitsEspaces; sauverPreferencesJardin(); rendre(); });
   nav.appendChild(chipPe);
 
   nav.appendChild(el("span", "sep"));
@@ -948,6 +1529,8 @@ function rendre() {
   now.sort(parNom); soon.sort(parNom); autres.sort(parNom);
 
   state._nowCount = now.length;
+  rendreLune();
+  rendreEtapes();
   remplirGrille("#grille-now", now, "#section-now", "#now-count");
   remplirGrille("#grille-soon", soon, "#section-soon", "#soon-count");
   remplirGrille("#grille-autres", autres, null, null);
@@ -973,6 +1556,199 @@ function rendre() {
 
   majMonPotager();
   if (document.body.classList.contains("configure")) majResume();
+}
+
+// ---------- Bandeau lunaire ----------
+function rendreLune() {
+  const b = $("#bandeau-lune");
+  if (!b || typeof infosLune !== "function") return;
+  const l = infosLune(dateDuJour());
+  state._lune = l;
+  // Le jour est-il favorable à ce que l'utilisateur cultive ?
+  const miennes = [...state.adoptees].map(id => PLANTES.find(p => p.id === id)).filter(Boolean);
+  const match = miennes.filter(p => typeLunairePlante(p) === l.typeJour);
+  b.innerHTML = `
+    <span class="lune-emoji">${l.emoji}</span>
+    <span class="lune-txt">
+      <span class="lune-titre">${l.phase} · lune ${l.croissante ? "croissante" : "décroissante"}
+        et ${l.montante ? "montante ↗" : "descendante ↘"}</span>
+      <span class="lune-sous">${l.conseil}${
+        match.length ? ` — ${match.length} de tes plantes en profite${match.length > 1 ? "nt" : ""}.` : ""}</span>
+    </span>
+    <span class="lune-jour ${match.length ? "match" : ""}">${l.pictoJour} ${l.label}</span>`;
+}
+
+function ouvrirModaleLune() {
+  const l = state._lune || infosLune(dateDuJour());
+  const fmt = d => d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const prochains = ["racine", "feuille", "fleur", "fruit"].map(t => {
+    const d = prochainJour(t, dateDuJour());
+    const info = { racine: "🥕", feuille: "🥬", fleur: "🌸", fruit: "🍅" }[t];
+    return `<span class="k">${info} Jour ${t}</span><span class="v">${d ? fmt(d) : "—"}</span>`;
+  }).join("");
+
+  const favorites = PLANTES.filter(p => typeLunairePlante(p) === l.typeJour
+    && state._statut && state._statut(p) === "now").slice(0, 8);
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="modale-img" style="background:linear-gradient(135deg,#3b3560,#1d1a33)">
+      <span class="emoji">${l.emoji}</span>
+    </div>
+    <div class="modale-corps">
+      <h2>${l.phase}</h2>
+      <p class="latin">Lune de ${l.age} jour(s) · constellation du ${l.constellation}</p>
+      <div class="modale-pictos">
+        <span class="picto">${l.croissante ? "🌒 Croissante" : "🌘 Décroissante"}</span>
+        <span class="picto">${l.montante ? "↗ Montante" : "↘ Descendante"}</span>
+        <span class="picto">${l.pictoJour} ${l.label}</span>
+      </div>
+      <p class="long">${l.conseil}</p>
+
+      <div class="bloc">
+        <h4>${l.pictoJour} Aujourd'hui, on favorise…</h4>
+        <p style="margin:0">${l.cible}</p>
+        ${favorites.length ? `<p style="margin:8px 0 0">À planter maintenant et en phase avec le jour :
+          <strong>${favorites.map(p => p.nom).join(", ")}</strong>.</p>` : ""}
+      </div>
+
+      <div class="bloc">
+        <h4>📅 Prochains jours favorables</h4>
+        <div class="fiche">${prochains}</div>
+      </div>
+
+      <div class="bloc">
+        <h4>ℹ️ À savoir</h4>
+        <p style="margin:0;font-size:14px">Les positions de la Lune sont calculées précisément.
+        Le découpage racine / feuille / fleur / fruit relève, lui, d'une tradition de jardinage
+        (biodynamie) dont l'effet n'est pas démontré scientifiquement : à prendre comme un repère
+        de rythme, jamais avant la météo et l'état réel de ton sol.</p>
+      </div>
+    </div>`;
+  $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+
+// ---------- Mes ressources : modale de gestion ----------
+function ouvrirModaleRessources() {
+  const possedees = [...state.ressources];
+  const dispo = Object.entries(RESSOURCES_CATALOGUE).filter(([k]) => !state.ressources.has(k));
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>🧰 Mes ressources</h2>
+      <p class="sous">Dis-moi ce que tu as sous la main : je te le rappellerai au bon moment.</p>
+
+      <div class="bloc">
+        <h4>Ce que je possède (${possedees.length})</h4>
+        ${possedees.length ? `<div class="res-liste">${possedees.map(k => {
+          const r = RESSOURCES_CATALOGUE[k];
+          const pu = prochaineUtilisation(r);
+          return `<div class="res-item"><span class="res-emoji">${r.emoji}</span>
+            <span class="res-nom">${r.label}<br><span class="res-quand">${r.quand}</span>
+              <br><span class="res-quand" style="color:${pu.maintenant ? "var(--vert-fonce)" : "var(--texte-doux)"};font-weight:700">
+                ${pu.maintenant ? "🔔 " : "🕒 "}${pu.texte}</span></span>
+            <button class="res-suppr" data-suppr="${k}">Retirer</button></div>`;
+        }).join("")}</div>` : `<p style="margin:0;font-size:14px;color:var(--texte-doux)">
+          Rien pour l'instant — ajoute ce que tu as ci-dessous.</p>`}
+      </div>
+
+      <div class="bloc">
+        <h4>Ajouter</h4>
+        <div class="res-choix">${dispo.map(([k, r]) =>
+          `<button data-add="${k}"><span class="rc-emoji">${r.emoji}</span>${r.label}</button>`).join("")
+          || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Tu as déjà tout ajouté 👍</p>`}</div>
+      </div>
+    </div>`;
+
+  const modale = $("#modale");
+  modale.querySelector(".fermer").addEventListener("click", fermerModale);
+  modale.addEventListener("click", e => {
+    const add = e.target.closest("[data-add]"), sup = e.target.closest("[data-suppr]");
+    if (add) { basculerRessource(add.dataset.add); ouvrirModaleRessources(); rendre(); }
+    if (sup) { basculerRessource(sup.dataset.suppr); ouvrirModaleRessources(); rendre(); }
+  });
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+
+// ---------- Prochaines étapes au potager ----------
+function rendreEtapes() {
+  const section = $("#section-etapes");
+  if (!section) return;
+  const liste = prochainesEtapes();
+  section.hidden = liste.length === 0;
+  const compteur = $("#etapes-count");
+  if (compteur) compteur.textContent = liste.length;
+  const conteneur = $("#liste-etapes");
+  if (!conteneur) return;
+  conteneur.replaceChildren();
+  liste.slice(0, 10).forEach(({ plante, emoji, label, date }) => {
+    const ligne = el("button", "etape-ligne");
+    ligne.innerHTML = `
+      <span class="etape-date">${fmtDateCourte(date)}</span>
+      <span class="etape-plante">${echapperHTML(plante.emoji)} ${echapperHTML(plante.nom)}</span>
+      <span class="etape-label">${emoji} ${echapperHTML(label)}</span>
+      <span class="lg-chevron">›</span>`;
+    ligne.addEventListener("click", () => ouvrirModale(plante));
+    conteneur.appendChild(ligne);
+  });
+
+  // Rappels proactifs : utilise ce que tu possèdes, au bon moment.
+  const sugg = suggestionsRessources();
+  if (sugg.length) section.hidden = false;
+  if (compteur) compteur.textContent = liste.length + sugg.length;
+  sugg.forEach(s => {
+    const cibles = s.concernees.length
+      ? ` — pour ${s.concernees.map(p => p.nom).join(", ")}`
+      : "";
+    const ligne = el("button", "etape-ligne etape-ressource");
+    ligne.innerHTML = `
+      <span class="etape-date">Ce mois-ci</span>
+      <span class="etape-plante">${s.emoji} ${echapperHTML(s.label)}</span>
+      <span class="etape-label">💡 ${echapperHTML(s.quand)}${echapperHTML(cibles)}</span>
+      <span class="lg-chevron">›</span>`;
+    ligne.addEventListener("click", () => ouvrirModaleRessource(s.cle));
+    conteneur.appendChild(ligne);
+  });
+}
+
+// Détail d'une ressource : quand et comment l'utiliser, sur quelles plantes.
+function ouvrirModaleRessource(cle) {
+  const r = RESSOURCES_CATALOGUE[cle];
+  if (!r) return;
+  const concernees = PLANTES.filter(p => { try { return r.cible(p); } catch (e) { return false; } });
+  const miennes = concernees.filter(p => estAdoptee(p.id));
+  const mois = r.mois.map(m => moisNom(m)).join(", ");
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="modale-img" style="background:linear-gradient(135deg,#e8dcc0,#c9ad78)">
+      <span class="emoji">${r.emoji}</span>
+    </div>
+    <div class="modale-corps">
+      <h2>${echapperHTML(r.label)}</h2>
+      <p class="latin">Ta ressource · ${echapperHTML(r.quand)}</p>
+      <p class="long">${echapperHTML(r.conseil)}</p>
+      <div class="bloc">
+        <h4>📅 Période d'emploi</h4>
+        <p style="margin:0">${mois}</p>
+      </div>
+      <div class="bloc">
+        <h4>🎯 Sur quoi l'utiliser</h4>
+        <p style="margin:0">${miennes.length
+          ? `Dans <strong>ton</strong> potager : ${miennes.map(p => `${p.emoji} ${p.nom}`).join(", ")}.`
+          : `Aucune de tes plantes adoptées n'est concernée pour l'instant.`}</p>
+        <p style="margin:8px 0 0;font-size:13.5px;color:var(--texte-doux)">
+          Plantes adaptées en général : ${concernees.slice(0, 10).map(p => p.nom).join(", ")}${
+            concernees.length > 10 ? "…" : ""}</p>
+      </div>
+    </div>`;
+  $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
 }
 
 // ---------- Repli du bandeau ----------
@@ -1009,6 +1785,7 @@ async function commit() {
       else majZone(state.zone, `« ${q} » introuvable — ajuste le climat`);
     }
   }
+  sauverPreferencesJardin();
   replier();
 }
 
@@ -1016,6 +1793,7 @@ function setVue(v) {
   state.vue = v;
   $("#vue-liste").classList.toggle("actif", v === "liste");
   $("#vue-cartes").classList.toggle("actif", v === "cartes");
+  sauverPreferencesJardin();
   rendre();
 }
 
@@ -1035,6 +1813,7 @@ function majZone(zone, source) {
   $("#zone").value = zone;
   $("#badge-zone").innerHTML = `${z.emoji} ${z.label}`;
   $("#zone-note").textContent = (source ? source + " · " : "") + z.note;
+  sauverPreferencesJardin();
   rendre();
 }
 
@@ -1046,7 +1825,10 @@ function init() {
     const o = el("option"); o.value = k; o.textContent = `${z.emoji} ${z.label}`;
     sel.appendChild(o);
   });
+  chargerPreferencesJardin();
   sel.value = state.zone;
+  $("#vue-liste").classList.toggle("actif", state.vue === "liste");
+  $("#vue-cartes").classList.toggle("actif", state.vue === "cartes");
 
   sel.addEventListener("change", () => majZone(sel.value, "Choix manuel"));
 
@@ -1075,6 +1857,7 @@ function init() {
   $("#surface").addEventListener("input", e => {
     const v = parseInt(e.target.value, 10);
     state.surface = (v && v > 0) ? v : null;
+    sauverPreferencesJardin();
     rendre();
   });
   $("#btn-geo").addEventListener("click", localiser);
@@ -1096,13 +1879,29 @@ function init() {
   });
 
   chargerAdoptees();
+  chargerDates();
+  chargerCachePhotos();
   chargerPlantesPerso();
   $("#btn-ajouter").addEventListener("click", () => ouvrirFormAjout(""));
+  $("#btn-ressources").addEventListener("click", ouvrirModaleRessources);
+  $("#bandeau-lune").addEventListener("click", ouvrirModaleLune);
+  chargerRessources();
 
   $("#overlay").addEventListener("click", e => { if (e.target.id === "overlay") fermerModale(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") fermerModale(); });
 
   majZone(state.zone, null);
+  completerPhotosManquantes();   // non bloquant : la tuile emoji reste le repli
+
+  // Préférences déjà connues (visite précédente) : afficher directement le résumé replié.
+  if (state._prefsConnues) {
+    const ville = $("#ville").value.trim();
+    if (ville) {
+      const z = zoneDepuisVille(ville);
+      if (z) majZone(z, `📍 ${ville}`);
+    }
+    replier();
+  }
 }
 
 function appliquerVille() {
@@ -1124,13 +1923,18 @@ function localiser() {
       majZone(z, "📡 Position détectée (estimation)");
       note.textContent = "Recherche de ta ville…";
       const v = await reverseVille(latitude, longitude);
+      let source = "📡 Position détectée (estimation)";
       if (v) {
         $("#ville").value = v.nom;                 // on remplit la préférence "ville"
         state.villeCoords = { lat: v.lat, lng: v.lng };
         z = zoneDepuisVille(v.nom) || z;           // affine si commune connue du dico
-        majZone(z, `📡 ${v.nom}${v.cp ? " (" + v.cp + ")" : ""}`);
+        source = `📡 ${v.nom}${v.cp ? " (" + v.cp + ")" : ""}`;
+        majZone(z, source);
+        sauverPreferencesJardin();
       }
       replier();
+      // Ici l'altitude est celle du GPS : c'est le cas le plus fiable, on l'utilise.
+      appliquerAltitude(latitude, longitude, z, source);
     },
     () => { note.textContent = "Localisation refusée. Saisis ta ville ou choisis le climat."; },
     { timeout: 8000, maximumAge: 600000 }

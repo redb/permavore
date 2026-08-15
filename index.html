@@ -7,6 +7,7 @@
   <meta name="description" content="Trouve les fruits et légumes adaptés à ta ville et à la surface de ton jardin. Que planter aujourd'hui ? Permavore te le dit." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B1%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="network.css" />
 </head>
 <body>
   <header class="hero">
@@ -59,11 +60,24 @@
     </div>
     <button class="mon-potager" id="mon-potager" hidden>🌱 Mon potager (0)</button>
     <button class="btn-ajouter" id="btn-ajouter">➕ Ajouter</button>
+    <button class="btn-ajouter" id="btn-ressources">🧰 Mes ressources</button>
   </div>
 
   <nav class="filtres" id="filtres" aria-label="Filtres"></nav>
 
   <main>
+    <section class="section" id="section-lune">
+      <button class="bandeau-lune" id="bandeau-lune" title="Voir le calendrier lunaire"></button>
+    </section>
+
+    <section class="section" id="section-etapes" hidden>
+      <div class="section-titre">
+        <h2>Prochaines étapes au potager</h2><span class="pastille" id="etapes-count">0</span>
+      </div>
+      <p class="section-sous">Prévisions calculées d'après tes dates de semis et de plantation.</p>
+      <div class="etapes" id="liste-etapes"></div>
+    </section>
+
     <section class="section" id="section-now" hidden>
       <div class="section-titre">
         <h2>À planter maintenant</h2><span class="pastille" id="now-count">0</span>
@@ -98,6 +112,8 @@
   </div>
 
   <script src="data.js"></script>
+  <script src="lune.js"></script>
   <script src="app.js"></script>
+  <script type="module" src="network.js"></script>
 </body>
 </html>
