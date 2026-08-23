@@ -1018,12 +1018,22 @@ function ouvrirModale(plante) {
         <ul class="conseils">${plante.conseils.map(x => `<li>${echapperHTML(x)}</li>`).join("")}</ul>
       </div>
 
+      <div class="bloc" id="bloc-sachets">
+        <h4>🌾 Mes sachets archivés</h4>
+        ${blocSachetsHTML(plante)}
+      </div>
+
       <a class="lien-achat" href="${echapperHTML(lienAchat(plante))}" target="_blank" rel="noopener">
         🛒 Où trouver graines / plants ${estSponsorise(plante) ? `<span class="spons">Lien partenaire ✦</span>` : ""}</a>
       ${plante.perso ? `<button class="btn-danger" id="btn-suppr-perso" style="width:100%;margin-top:10px">🗑️ Supprimer cette plante ajoutée</button>` : ""}
     </div>`;
 
   modale.querySelector(".fermer").addEventListener("click", fermerModale);
+
+  modale.addEventListener("click", e => {
+    const v = e.target.closest("[data-sachet]");
+    if (v) ouvrirSachet(v.dataset.sachet);
+  });
 
   // Suivi de culture : liste des étapes + changement de date
   const champDate = modale.querySelector("#suivi-date");
@@ -1295,7 +1305,15 @@ function photoPlante(plante) {
   if (estImageValide(plante.photo) && plante.photo) return urlExterneSure(plante.photo);
   const entree = photosCache[plante.id];
   if (entree && entree.url && estImageValide(entree.url)) return urlExterneSure(entree.url);
-  return "";
+  return photoSachetIllustration(plante.id);
+}
+
+// La photo du sachet (le légume y est imprimé) sert d'illustration de repli :
+// c'est souvent la meilleure aide à l'identification pour une variété précise.
+function photoSachetIllustration(plantId) {
+  if (typeof sachetsDe !== "function") return "";
+  const s = sachetsDe(plantId).find(x => x.meta && x.meta.illustre);
+  return s ? s.thumb : "";
 }
 // Faut-il (re)chercher une photo pour cette plante ?
 function photoARechercher(plante) {
@@ -1395,13 +1413,22 @@ function enregistrerPlante() {
   sauverPlantesPerso();
   state.recherche = ""; $("#recherche").value = "";
   rendre();
+  if (state._photoPourNouvelle && state._photoEnCours) {
+    state._photoPourNouvelle = false;
+    ecranDetailsSachet(p);        // on rattache d'abord la photo du sachet
+    return;
+  }
   demanderSiPlantee(p);           // « tu l'as déjà en terre, ou pas encore ? »
 }
 
 // Après l'ajout d'une plante : est-elle déjà en terre ? Si oui, on l'adopte et on
 // enregistre la date pour alimenter les prochaines étapes ; sinon on la garde en base.
-function demanderSiPlantee(p) {
+function demanderSiPlantee(p, contexte = "ajout") {
   const auj = dateDuJour().toISOString().slice(0, 10);
+  const titre = contexte === "sachet"
+    ? `Sachet archivé ✅` : `${echapperHTML(p.nom)} ajoutée ✅`;
+  const sous = contexte === "sachet"
+    ? `Il est rattaché à ${echapperHTML(p.nom)}.` : `Elle fait maintenant partie de ta base.`;
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="modale-img" style="background:${fondCarte(p)}">
@@ -1409,8 +1436,8 @@ function demanderSiPlantee(p) {
         ? `<img src="${echapperHTML(photoPlante(p))}" alt="" onerror="this.remove()">` : ""}
     </div>
     <div class="modale-corps">
-      <h2>${echapperHTML(p.nom)} ajoutée ✅</h2>
-      <p class="latin">Elle fait maintenant partie de ta base.</p>
+      <h2>${titre}</h2>
+      <p class="latin">${sous}</p>
       <div class="bloc">
         <h4>🌱 Tu l'as déjà en terre ?</h4>
         <p style="margin:0 0 12px;font-size:14px">Si oui, je la mets dans « Mon potager »
@@ -1884,6 +1911,16 @@ function init() {
   chargerPlantesPerso();
   $("#btn-ajouter").addEventListener("click", () => ouvrirFormAjout(""));
   $("#btn-ressources").addEventListener("click", ouvrirModaleRessources);
+  $("#btn-photo").addEventListener("click", () => $("#input-photo").click());
+  $("#input-photo").addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";                       // permet de reprendre la même photo
+    if (f) traiterPhotoSachet(f);
+  });
+  chargerSachets().then(rendre);               // vignettes en mémoire, puis re-rendu
+  $("#btn-plan").addEventListener("click", basculerPlan);
+  chargerJardin();
+  installerDessinPlan();
   $("#bandeau-lune").addEventListener("click", ouvrirModaleLune);
   chargerRessources();
 
@@ -1942,3 +1979,484 @@ function localiser() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+/* =========================================================================
+   Sachets de graines : photo → fiche + archive
+   Le sachet sert de guide (variété, dates, conseils du semencier) et
+   d'archive (ce que j'ai acheté, quand). La photo du légume imprimée sur le
+   sachet sert aussi d'illustration quand la plante n'en a pas.
+   ========================================================================= */
+
+// Vignettes des sachets d'une plante, pour la fiche.
+function blocSachetsHTML(plante) {
+  const liste = typeof sachetsDe === "function" ? sachetsDe(plante.id) : [];
+  if (!liste.length) {
+    return `<p style="margin:0;font-size:14px;color:var(--texte-doux)">
+      Aucun sachet archivé. Utilise <strong>📷 Photo sachet</strong> pour garder
+      la trace de la variété et des consignes du semencier.</p>`;
+  }
+  return `<div class="sachets-grille">${liste.map(s => `
+    <button class="sachet-vignette" data-sachet="${echapperHTML(s.id)}"
+            title="${echapperHTML(s.meta.variete || plante.nom)}">
+      <img src="${s.thumb}" alt="Sachet ${echapperHTML(plante.nom)}" />
+      <span class="sv-date">${echapperHTML(s.meta.variete || fmtDateCourte(new Date(s.meta.ajoute)))}</span>
+    </button>`).join("")}</div>`;
+}
+
+// Consultation plein écran d'un sachet + suppression.
+async function ouvrirSachet(id) {
+  const s = await lireSachetComplet(id);
+  if (!s) return;
+  const plante = PLANTES.find(p => p.id === s.plantId);
+  const m = s.meta || {};
+  const ligne = (k, v) => v ? `<span class="k">${k}</span><span class="v">${echapperHTML(v)}</span>` : "";
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>🌾 ${echapperHTML(m.variete || (plante ? plante.nom : "Sachet"))}</h2>
+      <p class="sous">${plante ? echapperHTML(plante.nom) : ""} · archivé le
+        ${echapperHTML(fmtDateCourte(new Date(m.ajoute)))}</p>
+      <img class="sachet-plein" src="${s.full}" alt="Sachet de graines" />
+      ${(m.semencier || m.annee || m.notes) ? `<div class="bloc"><h4>Informations relevées</h4>
+        <div class="fiche">${ligne("Semencier", m.semencier)}${ligne("Année / DLUO", m.annee)}</div>
+        ${m.notes ? `<p style="margin:8px 0 0;font-size:14px">${echapperHTML(m.notes)}</p>` : ""}
+      </div>` : ""}
+      <div class="form-actions">
+        <button class="btn secondaire" id="s-retour">← Retour à la fiche</button>
+        <button class="btn-danger" id="s-suppr">🗑️ Supprimer</button>
+      </div>
+    </div>`;
+
+  const retour = () => { if (plante) ouvrirModale(plante); else fermerModale(); };
+  $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
+  $("#s-retour").addEventListener("click", retour);
+  $("#s-suppr").addEventListener("click", async () => {
+    await supprimerSachet(id, s.plantId);
+    rendre(); retour();
+  });
+}
+
+// Étape 1 : l'utilisateur vient de prendre la photo → à quelle plante la rattacher ?
+async function traiterPhotoSachet(fichier) {
+  ouvrirAttente("Traitement de la photo…");
+  let photo;
+  try {
+    photo = await preparerPhoto(fichier);
+  } catch (e) {
+    ouvrirMessage("Photo illisible", "Ce fichier n'a pas pu être lu comme une image. Réessaie.");
+    return;
+  }
+  state._photoEnCours = photo;
+  ecranAssociation("");
+}
+
+// Écran de rattachement : préviens, cherche la plante, ou crée une fiche.
+function ecranAssociation(filtre) {
+  const photo = state._photoEnCours;
+  if (!photo) return;
+  const q = normaliseVille(filtre || "");
+  const candidats = (q
+    ? PLANTES.filter(p => normaliseVille(p.nom + " " + p.latin).includes(q))
+    : PLANTES.filter(p => estAdoptee(p.id) || (state._statut && state._statut(p) === "now"))
+  ).slice(0, 12);
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>📷 Sachet photographié</h2>
+      <p class="sous">Rattache-le à une plante : il servira de guide et d'archive.</p>
+      <img class="photo-preview" src="${photo.thumb}" alt="Aperçu du sachet" />
+
+      <div class="fgrid" style="margin-top:14px">
+        <div class="fchamp full">
+          <label for="s-recherche">Quelle plante ?</label>
+          <input id="s-recherche" type="text" value="${echapperHTML(filtre || "")}"
+                 placeholder="Tape le nom lu sur le sachet…" autocomplete="off" />
+        </div>
+      </div>
+      <div class="assoc-liste">
+        ${candidats.map(p => `
+          <button class="assoc-item" data-plante="${echapperHTML(p.id)}">
+            <span class="ai-emoji">${p.emoji}</span>
+            <span class="ai-nom">${echapperHTML(p.nom)}</span>
+            <span class="ai-cat">${CATEGORIES[p.cat].label}</span>
+          </button>`).join("")
+        || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Aucune plante connue sous ce nom.</p>`}
+        <button class="assoc-item assoc-nouvelle" id="s-nouvelle">
+          ➕ Créer une nouvelle fiche${filtre ? ` pour « ${echapperHTML(filtre)} »` : ""}</button>
+      </div>
+    </div>`;
+
+  $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
+  const champ = $("#s-recherche");
+  let t = null;
+  champ.addEventListener("input", () => {
+    clearTimeout(t);
+    const v = champ.value;
+    t = setTimeout(() => {
+      const pos = champ.selectionStart;
+      ecranAssociation(v);
+      const nouveau = $("#s-recherche");
+      if (nouveau) { nouveau.focus(); nouveau.setSelectionRange(pos, pos); }
+    }, 250);
+  });
+  $("#modale").addEventListener("click", e => {
+    const b = e.target.closest("[data-plante]");
+    if (b) ecranDetailsSachet(PLANTES.find(p => p.id === b.dataset.plante));
+  });
+  $("#s-nouvelle").addEventListener("click", () => {
+    // La photo reste en attente : elle sera rattachée à la plante créée.
+    state._photoPourNouvelle = true;
+    ouvrirFormAjout(champ.value.trim());
+  });
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+
+// Étape 2 : compléter ce qui est écrit sur le sachet, puis archiver.
+function ecranDetailsSachet(plante) {
+  if (!plante || !state._photoEnCours) return;
+  const photo = state._photoEnCours;
+  const sansPhoto = !photoPlante(plante);
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>${plante.emoji} ${echapperHTML(plante.nom)}</h2>
+      <p class="sous">Recopie ce qui est utile sur le sachet (tout est facultatif).</p>
+      <img class="photo-preview" src="${photo.thumb}" alt="Aperçu du sachet" />
+      <div class="fgrid" style="margin-top:14px">
+        <div class="fchamp"><label for="s-variete">Variété</label>
+          <input id="s-variete" placeholder="Ex. Cœur de bœuf" /></div>
+        <div class="fchamp"><label for="s-semencier">Semencier</label>
+          <input id="s-semencier" placeholder="Ex. Kokopelli" /></div>
+        <div class="fchamp full"><label for="s-annee">Année / date limite de semis</label>
+          <input id="s-annee" placeholder="Ex. à semer avant 2029" /></div>
+        <div class="fchamp full"><label for="s-notes">Notes du sachet</label>
+          <textarea id="s-notes" placeholder="Profondeur, éclaircissage, conseils du semencier…"></textarea></div>
+        ${sansPhoto ? `<div class="fchamp inline full">
+          <input id="s-illustrer" type="checkbox" checked />
+          <label for="s-illustrer">Utiliser cette photo pour illustrer la plante (identification)</label>
+        </div>` : ""}
+      </div>
+      <div class="form-actions">
+        <button class="btn secondaire" id="s-retour">← Changer de plante</button>
+        <button class="btn" id="s-archiver">🌾 Archiver le sachet</button>
+      </div>
+    </div>`;
+
+  $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
+  $("#s-retour").addEventListener("click", () => ecranAssociation(""));
+  $("#s-archiver").addEventListener("click", () => archiverSachet(plante));
+}
+
+async function archiverSachet(plante) {
+  const photo = state._photoEnCours;
+  if (!photo) return;
+  const val = id => { const e = $("#" + id); return e ? e.value.trim() : ""; };
+  const illustrer = $("#s-illustrer") ? $("#s-illustrer").checked : false;
+
+  const sachet = {
+    id: `s-${plante.id}-${Date.now().toString(36)}`,
+    plantId: plante.id,
+    full: photo.full,
+    thumb: photo.thumb,
+    meta: {
+      variete: val("s-variete"), semencier: val("s-semencier"),
+      annee: val("s-annee"), notes: val("s-notes"),
+      ajoute: new Date().toISOString(),
+      illustre: illustrer,
+    },
+  };
+  try {
+    await enregistrerSachet(sachet);
+  } catch (e) {
+    ouvrirMessage("Archivage impossible",
+      "Le stockage local du navigateur a refusé l'enregistrement (espace saturé "
+      + "ou navigation privée). La photo n'a pas été conservée.");
+    return;
+  }
+  state._photoEnCours = null;
+  rendre();
+  // Sachet en main mais culture pas encore lancée : proposer d'enregistrer le semis.
+  if (!estAdoptee(plante.id)) demanderSiPlantee(plante, "sachet");
+  else ouvrirModale(plante);
+}
+
+// Petites modales utilitaires (attente / message)
+function ouvrirAttente(texte) {
+  $("#modale").innerHTML = `<div class="form-ajout"><h2>⏳ ${echapperHTML(texte)}</h2>
+    <p class="sous">Un instant…</p></div>`;
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+function ouvrirMessage(titre, texte) {
+  $("#modale").innerHTML = `<button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout"><h2>${echapperHTML(titre)}</h2>
+    <p class="sous">${echapperHTML(texte)}</p>
+    <div class="form-actions"><button class="btn" id="msg-ok">Fermer</button></div></div>`;
+  $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
+  $("#msg-ok").addEventListener("click", fermerModale);
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+
+/* =========================================================================
+   Plan du jardin : dessin des planches, culture, récolte et rotation
+   ========================================================================= */
+
+const TAILLE_CASE_PX = 26;          // rendu d'une maille de 0,5 m
+
+function fmtM2(m2) {
+  return `${m2.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} m²`;
+}
+
+function basculerPlan() {
+  const s = $("#section-plan");
+  const ouvert = s.hidden;
+  s.hidden = !ouvert;
+  $("#btn-plan").classList.toggle("actif", ouvert);
+  if (ouvert) { rendrePlan(); s.scrollIntoView({ behavior: "smooth", block: "start" }); }
+}
+
+function rendrePlan() {
+  const g = $("#plan-grille");
+  if (!g) return;
+  g.style.setProperty("--maille", TAILLE_CASE_PX + "px");
+  g.style.width = GRILLE_COLS * TAILLE_CASE_PX + "px";
+  g.style.height = GRILLE_LIGNES * TAILLE_CASE_PX + "px";
+  g.replaceChildren();
+
+  jardin.planches.forEach(p => g.appendChild(elementPlanche(p)));
+
+  const surf = surfaceTotale();
+  $("#plan-surface").textContent = fmtM2(surf);
+  $("#plan-legende").innerHTML = `
+    <span><i class="lg-vide"></i> Planche libre</span>
+    <span><i class="lg-cult"></i> En culture</span>
+    <span><i class="lg-reco"></i> Récolte en cours</span>
+    <span>📐 1 carreau fin = 0,5 m · 1 carreau épais = 1 m</span>`;
+
+  // Le plan sert aussi de source pour la surface cultivable
+  if (surf > 0 && !state.surface) {
+    state.surface = Math.round(surf);
+    const champ = $("#surface"); if (champ) champ.value = state.surface;
+  }
+}
+
+function elementPlanche(p) {
+  const plante = p.plantId ? PLANTES.find(x => x.id === p.plantId) : null;
+  const d = el("div", "planche" + (plante ? "" : " vide"));
+  d.style.left = p.x * TAILLE_CASE_PX + "px";
+  d.style.top = p.y * TAILLE_CASE_PX + "px";
+  d.style.width = p.w * TAILLE_CASE_PX - 2 + "px";
+  d.style.height = p.h * TAILLE_CASE_PX - 2 + "px";
+  d.dataset.planche = p.id;
+
+  const petite = p.w * p.h <= 2;
+  if (plante) {
+    const enRecolte = recolteCommencee(p, plante);
+    if (enRecolte) d.classList.add("recolte");
+    d.innerHTML = `<span class="pl-emoji">${plante.emoji}</span>
+      ${petite ? "" : `<span>${echapperHTML(plante.nom)}</span>`}
+      <span class="pl-surface">${fmtM2(surfacePlanche(p))}</span>
+      ${enRecolte ? `<span class="pl-alerte" title="Récolte en cours">🧺</span>` : ""}`;
+  } else {
+    d.innerHTML = `<span class="pl-emoji">＋</span>
+      <span class="pl-surface">${fmtM2(surfacePlanche(p))}</span>`;
+  }
+  return d;
+}
+
+// La récolte a-t-elle commencé pour cette planche ? (déclenche la proposition de rotation)
+function recolteCommencee(planche, plante) {
+  if (!plante || !planche.dateSemis) return false;
+  const etapes = typeof etapesCulture === "function" ? etapesCulture(plante, planche.dateSemis) : [];
+  const recolte = etapes.find(e => e.cle === "recolte" && e.date);
+  return Boolean(recolte && recolte.date <= dateDuJour());
+}
+
+/* ---------- Dessin : clic simple = 1 m², glisser = taille libre ---------- */
+function installerDessinPlan() {
+  const g = $("#plan-grille");
+  if (!g) return;
+  let depart = null, apercu = null;
+
+  const caseDepuisEvent = e => {
+    const r = g.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(GRILLE_COLS - 1, Math.floor((e.clientX - r.left) / TAILLE_CASE_PX))),
+      y: Math.max(0, Math.min(GRILLE_LIGNES - 1, Math.floor((e.clientY - r.top) / TAILLE_CASE_PX))),
+    };
+  };
+  const rectEntre = (a, b) => ({
+    x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+    w: Math.abs(a.x - b.x) + 1, h: Math.abs(a.y - b.y) + 1,
+  });
+
+  g.addEventListener("pointerdown", e => {
+    const surPlanche = e.target.closest("[data-planche]");
+    if (surPlanche) return;                       // clic sur une planche : géré ailleurs
+    depart = caseDepuisEvent(e);
+    g.setPointerCapture(e.pointerId);
+    apercu = el("div", "plan-apercu");
+    g.appendChild(apercu);
+    majApercu(rectEntre(depart, depart));
+  });
+
+  function majApercu(r) {
+    if (!apercu) return;
+    apercu.style.left = r.x * TAILLE_CASE_PX + "px";
+    apercu.style.top = r.y * TAILLE_CASE_PX + "px";
+    apercu.style.width = r.w * TAILLE_CASE_PX + "px";
+    apercu.style.height = r.h * TAILLE_CASE_PX + "px";
+    apercu.textContent = fmtM2(r.w * r.h * M2_PAR_CASE);
+    apercu.style.borderColor = placeLibre(r) ? "" : "#c0392b";
+  }
+
+  g.addEventListener("pointermove", e => {
+    if (!depart) return;
+    majApercu(rectEntre(depart, caseDepuisEvent(e)));
+  });
+
+  const terminer = e => {
+    if (!depart) return;
+    const fin = caseDepuisEvent(e);
+    let r = rectEntre(depart, fin);
+    // Clic simple (une seule case) → planche d'1 m² (2 × 2 mailles)
+    if (r.w === 1 && r.h === 1) {
+      const carre = { x: Math.min(r.x, GRILLE_COLS - 2), y: Math.min(r.y, GRILLE_LIGNES - 2), w: 2, h: 2 };
+      if (placeLibre(carre)) r = carre;
+    }
+    if (apercu) { apercu.remove(); apercu = null; }
+    depart = null;
+    if (!placeLibre(r)) {
+      ouvrirMessage("Emplacement occupé", "Une planche se trouve déjà à cet endroit. "
+        + "Dessine ailleurs, ou supprime la planche existante.");
+      return;
+    }
+    const p = creerPlanche(r.x, r.y, r.w, r.h);
+    rendrePlan();
+    if (p) ouvrirModalePlanche(p.id);
+  };
+  g.addEventListener("pointerup", terminer);
+  g.addEventListener("pointercancel", () => {
+    if (apercu) { apercu.remove(); apercu = null; }
+    depart = null;
+  });
+
+  // Clic sur une planche existante
+  g.addEventListener("click", e => {
+    const b = e.target.closest("[data-planche]");
+    if (b) ouvrirModalePlanche(b.dataset.planche);
+  });
+}
+
+/* ---------- Modale d'une planche ---------- */
+function ouvrirModalePlanche(id) {
+  const p = jardin.planches.find(x => x.id === id);
+  if (!p) return;
+  const plante = p.plantId ? PLANTES.find(x => x.id === p.plantId) : null;
+  const hist = (p.historique || []).slice(-4).reverse();
+
+  const histHTML = hist.length
+    ? `<ul class="conseils">${hist.map(h => {
+        const pl = PLANTES.find(x => x.id === h.plantId);
+        return `<li>${h.annee} — ${echapperHTML(pl ? pl.nom : h.plantId)}
+          <span style="color:var(--texte-doux)">(${echapperHTML(h.famille || "?")})</span></li>`;
+      }).join("")}</ul>`
+    : `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Aucune culture précédente enregistrée.</p>`;
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>${plante ? plante.emoji + " " + echapperHTML(plante.nom) : "🟫 Planche libre"}</h2>
+      <p class="sous">${fmtM2(surfacePlanche(p))} · ${p.w * MAILLE_M} × ${p.h * MAILLE_M} m</p>
+
+      ${plante ? `<div class="bloc">
+        <h4>🌱 Culture en place</h4>
+        <p style="margin:0">Semée / plantée le
+          <strong>${p.dateSemis ? echapperHTML(fmtDateCourte(new Date(p.dateSemis))) : "—"}</strong>.</p>
+        <p style="margin:6px 0 0;font-size:13.5px;color:var(--texte-doux)">
+          Famille : ${echapperHTML(plante.famille || "?")} ·
+          ${LIBELLE_ROTATION[typeRotation(plante)].emoji} ${LIBELLE_ROTATION[typeRotation(plante)].label}</p>
+        <div class="form-actions">
+          <button class="btn" id="pl-recolte">🧺 Récolte terminée</button>
+        </div>
+      </div>` : `<div class="bloc">
+        <h4>🌱 Que cultiver ici ?</h4>
+        ${blocRotationHTML(p)}
+      </div>`}
+
+      <div class="bloc">
+        <h4>📜 Historique de la planche</h4>
+        ${histHTML}
+      </div>
+
+      <div class="form-actions">
+        <button class="btn secondaire" id="pl-fermer">Fermer</button>
+        <button class="btn-danger" id="pl-suppr">🗑️ Supprimer la planche</button>
+      </div>
+    </div>`;
+
+  const modale = $("#modale");
+  modale.querySelector(".fermer").addEventListener("click", fermerModale);
+  $("#pl-fermer").addEventListener("click", fermerModale);
+  $("#pl-suppr").addEventListener("click", () => {
+    supprimerPlanche(p.id); rendrePlan(); fermerModale();
+  });
+  const btnRec = $("#pl-recolte");
+  if (btnRec) btnRec.addEventListener("click", () => {
+    recolterPlanche(p, PLANTES);
+    rendrePlan();
+    ouvrirModalePlanche(p.id);        // enchaîne sur les suggestions de rotation
+  });
+  modale.addEventListener("click", e => {
+    const b = e.target.closest("[data-rot]");
+    if (!b) return;
+    planterDans(p, b.dataset.rot, dateDuJour().toISOString().slice(0, 10));
+    const pl = PLANTES.find(x => x.id === b.dataset.rot);
+    if (pl && !estAdoptee(pl.id)) { state.adoptees.add(pl.id); sauverAdoptees(); }
+    if (pl) { state.dates[pl.id] = dateDuJour().toISOString().slice(0, 10); sauverDates(); }
+    rendrePlan(); rendre(); ouvrirModalePlanche(p.id);
+  });
+
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+
+// Suggestions de rotation pour une planche libre
+function blocRotationHTML(p) {
+  const estPlantable = pl => state._statut && state._statut(pl) === "now";
+  const r = suggestionsRotation(p, PLANTES.filter(pl => adapteeZone(pl, state.zone)),
+    { anneeCourante: dateDuJour().getFullYear(), estPlantable });
+
+  const cycle = CYCLE_ROTATION.map(t =>
+    `<span class="rc-etape ${t === r.typeSuivant ? "actif" : ""}">${LIBELLE_ROTATION[t].emoji} ${LIBELLE_ROTATION[t].label}</span>`
+  ).join(" → ");
+
+  const intro = r.dernier
+    ? `Après ${echapperHTML((PLANTES.find(x => x.id === r.dernier.plantId) || {}).nom || "la culture précédente")},
+       l'étape suivante du cycle est <strong>${LIBELLE_ROTATION[r.typeSuivant].label}</strong>.`
+    : `Planche neuve : on démarre par une <strong>légumineuse</strong>, qui enrichit le sol en azote.`;
+
+  const liste = r.suggestions.map(s => `
+    <button class="rot-item" data-rot="${echapperHTML(s.plante.id)}">
+      <span style="font-size:20px">${s.plante.emoji}</span>
+      <span class="ri-nom">${echapperHTML(s.plante.nom)}
+        <span class="ri-pourquoi">${echapperHTML(s.raisons.join(" · ") || "compatible avec cette planche")}</span></span>
+      <span class="lg-chevron">›</span>
+    </button>`).join("");
+
+  const exclus = r.exclus.length
+    ? `<p style="margin:10px 0 4px;font-size:12.5px;font-weight:700;color:var(--texte-doux)">À éviter ici :</p>`
+      + r.exclus.slice(0, 3).map(e =>
+        `<div class="rot-exclu">🚫 ${echapperHTML(e.plante.nom)} — ${echapperHTML(e.motif)}</div>`).join("")
+    : "";
+
+  return `<p style="margin:0 0 8px;font-size:14px">${intro}</p>
+    <div class="rot-cycle">${cycle}</div>
+    ${liste || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Aucune culture adaptée trouvée.</p>`}
+    ${exclus}`;
+}

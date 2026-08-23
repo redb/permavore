@@ -484,3 +484,105 @@ footer strong { color: var(--vert-fonce); }
   .etape-ligne .etape-label { flex-basis: 100%; }
 }
 .suivi-etapes .etape-info { color: #8a6d1f; }
+
+/* ---------- Sachets de graines (photo / archive) ---------- */
+.btn-photo {
+  border: none; background: var(--terre); color: #fff;
+  padding: 10px 14px; border-radius: 12px; font-weight: 700; font-size: 14px;
+}
+.btn-photo:hover { background: #63472c; }
+
+.sachets-grille { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.sachet-vignette {
+  width: 84px; height: 84px; border-radius: 10px; overflow: hidden; position: relative;
+  border: 1px solid var(--bord); background: #fff; padding: 0; cursor: zoom-in;
+}
+.sachet-vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sachet-vignette .sv-date {
+  position: absolute; left: 0; right: 0; bottom: 0; font-size: 9.5px; font-weight: 700;
+  background: rgba(0,0,0,.55); color: #fff; padding: 2px 4px; text-align: center;
+}
+.sachet-plein { width: 100%; border-radius: 12px; display: block; }
+
+.photo-preview {
+  width: 100%; max-height: 260px; object-fit: contain; border-radius: 12px;
+  background: #f0ede6; display: block;
+}
+.assoc-liste { display: flex; flex-direction: column; gap: 6px; max-height: 230px; overflow-y: auto; margin-top: 8px; }
+.assoc-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; text-align: left;
+  border: 1px solid var(--bord); border-radius: 10px; background: #fff; font-size: 14px; width: 100%;
+}
+.assoc-item:hover { border-color: var(--vert); background: var(--vert-clair); }
+.assoc-item .ai-emoji { font-size: 20px; }
+.assoc-item .ai-nom { font-weight: 700; flex: 1; }
+.assoc-item .ai-cat { font-size: 12px; color: var(--texte-doux); }
+.assoc-nouvelle { border-style: dashed; border-color: var(--vert); color: var(--vert-fonce); font-weight: 700; }
+
+/* ---------- Plan du jardin ---------- */
+.plan-wrap {
+  overflow: auto; border: 1px solid var(--bord); border-radius: var(--radius);
+  background: #fbf9f4; box-shadow: var(--ombre); padding: 10px;
+}
+.plan-grille {
+  position: relative; display: grid; touch-action: none; user-select: none;
+  margin: 0 auto; background:
+    repeating-linear-gradient(0deg,  #e6e0d2 0 1px, transparent 1px var(--maille)),
+    repeating-linear-gradient(90deg, #e6e0d2 0 1px, transparent 1px var(--maille));
+  border: 1px solid #d8d2c2; border-radius: 8px;
+}
+/* Repère du mètre : trait plus marqué toutes les 2 mailles */
+.plan-grille::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 8px;
+  background:
+    repeating-linear-gradient(0deg,  #cfc6ae 0 1px, transparent 1px calc(var(--maille) * 2)),
+    repeating-linear-gradient(90deg, #cfc6ae 0 1px, transparent 1px calc(var(--maille) * 2));
+}
+.planche {
+  position: absolute; border-radius: 8px; border: 2px solid var(--vert-fonce);
+  background: var(--vert-clair); color: var(--vert-fonce);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; cursor: pointer;
+  padding: 2px; z-index: 2; line-height: 1.15;
+}
+.planche:hover { filter: brightness(.97); }
+.planche.vide { background: #f4efe2; border-color: #b9a06a; color: #6d5a33; border-style: dashed; }
+.planche.recolte { background: #fff3d9; border-color: var(--now); color: #8a5d10; }
+.planche .pl-emoji { font-size: 20px; }
+.planche .pl-surface { font-size: 10px; font-weight: 600; opacity: .8; }
+.planche .pl-alerte { position: absolute; top: 2px; right: 4px; font-size: 12px; }
+.plan-apercu {
+  position: absolute; z-index: 3; border: 2px dashed var(--vert); border-radius: 8px;
+  background: rgba(47,125,71,.15); pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; color: var(--vert-fonce);
+}
+.plan-legende {
+  display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
+  font-size: 12.5px; color: var(--texte-doux);
+}
+.plan-legende span { display: inline-flex; align-items: center; gap: 5px; }
+.plan-legende i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid; display: inline-block; }
+.lg-vide { background: #f4efe2; border-color: #b9a06a; }
+.lg-cult { background: var(--vert-clair); border-color: var(--vert-fonce); }
+.lg-reco { background: #fff3d9; border-color: var(--now); }
+
+/* Suggestions de rotation */
+.rot-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  border: 1px solid var(--bord); border-radius: 10px; background: #fff; padding: 9px 11px;
+  margin-bottom: 6px; font-size: 14px;
+}
+.rot-item:hover { border-color: var(--vert); background: var(--vert-clair); }
+.rot-item .ri-nom { font-weight: 700; flex: 1; }
+.rot-item .ri-pourquoi { font-size: 12px; color: var(--texte-doux); display: block; font-weight: 400; }
+.rot-exclu {
+  font-size: 12.5px; color: #a3402f; background: #fdeeeb; border-radius: 8px;
+  padding: 7px 10px; margin-bottom: 5px;
+}
+.rot-cycle {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12.5px; font-weight: 700; margin: 4px 0 10px;
+}
+.rot-cycle .rc-etape { padding: 4px 9px; border-radius: 999px; background: #eee9dc; color: #6d5a33; }
+.rot-cycle .rc-etape.actif { background: var(--vert); color: #fff; }

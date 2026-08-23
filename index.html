@@ -61,6 +61,9 @@
     <button class="mon-potager" id="mon-potager" hidden>🌱 Mon potager (0)</button>
     <button class="btn-ajouter" id="btn-ajouter">➕ Ajouter</button>
     <button class="btn-ajouter" id="btn-ressources">🧰 Mes ressources</button>
+    <button class="btn-photo" id="btn-photo">📷 Photo sachet</button>
+    <button class="btn-ajouter" id="btn-plan">🗺️ Plan du jardin</button>
+    <input id="input-photo" type="file" accept="image/*" capture="environment" hidden />
   </div>
 
   <nav class="filtres" id="filtres" aria-label="Filtres"></nav>
@@ -68,6 +71,19 @@
   <main>
     <section class="section" id="section-lune">
       <button class="bandeau-lune" id="bandeau-lune" title="Voir le calendrier lunaire"></button>
+    </section>
+
+    <section class="section" id="section-plan" hidden>
+      <div class="section-titre">
+        <h2>Mon plan de jardin</h2><span class="pastille" id="plan-surface">0 m²</span>
+      </div>
+      <p class="section-sous" id="plan-aide">
+        Clique une case pour poser une planche d'1 m², ou reste appuyé et glisse
+        pour dessiner la taille voulue. Clique une planche pour la cultiver.</p>
+      <div class="plan-wrap">
+        <div class="plan-grille" id="plan-grille"></div>
+      </div>
+      <div class="plan-legende" id="plan-legende"></div>
     </section>
 
     <section class="section" id="section-etapes" hidden>
@@ -113,6 +129,8 @@
 
   <script src="data.js"></script>
   <script src="lune.js"></script>
+  <script src="sachets.js"></script>
+  <script src="jardin.js"></script>
   <script src="app.js"></script>
   <script type="module" src="network.js"></script>
 </body>

@@ -147,6 +147,49 @@ Les 21 autres plantes sont mises en place en plant, caïeu, tubercule ou rhizome
 durées sont des ordres de grandeur à température favorable ; un sol froid les
 allonge nettement.
 
+
+## Sachets de graines (photo, guide et archive)
+
+Bouton **📷 Photo sachet** : ouvre l'appareil photo (mobile), compresse l'image
+en deux tailles (vignette 400 px, plein 1400 px) et la range dans **IndexedDB**
+— pas localStorage, qui serait saturé par quelques photos et ferait échouer
+toutes les autres sauvegardes.
+
+Le sachet se rattache à une plante existante ou déclenche la création d'une
+fiche. On y note variété, semencier, date limite de semis et consignes. Si la
+plante n'a pas d'illustration, la photo du sachet lui en sert (le légume y est
+imprimé : c'est une aide à l'identification de la variété).
+
+**Limite assumée** : le texte du sachet n'est pas lu automatiquement. Un OCR
+client (Tesseract.js, ~4 Mo) donnerait des résultats médiocres sur des sachets
+brillants ou courbés ; les champs sont donc saisis à la main.
+
+## Plan du jardin et rotation des cultures
+
+`jardin.js`. La grille a une maille de **0,5 m** (0,25 m² par case), ce qui donne
+exactement les formes attendues :
+
+| Surface | Cases | Forme |
+|---|---|---|
+| 0,5 m² | 2 | rectangle 0,5 × 1 m |
+| 1 m² | 4 | **carré** 1 × 1 m |
+| 3 m² | 12 | rectangle 1 × 3 m |
+
+Clic = planche d'1 m² ; appui + glissé = taille libre. Les chevauchements sont
+refusés.
+
+**Rotation** — deux règles cumulées quand une planche est récoltée :
+
+1. **Famille botanique** : pas deux fois la même famille au même endroit avant
+   3 ans (les parasites et maladies persistent dans le sol). L'exclusion est
+   affichée avec son motif.
+2. **Cycle de fertilité** : légumineuse → feuille → fruit → racine. Les
+   légumineuses fixent l'azote, les feuilles le consomment, les fruits sont
+   gourmands, les racines terminent sur un sol appauvri.
+
+Les suggestions sont en plus filtrées par saison et par zone climatique, et les
+vivaces sont exclues de la rotation.
+
 ## À enrichir
 
 - Calendrier : les fenêtres `semis` restent des valeurs France métropole par
