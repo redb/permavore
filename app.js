@@ -1030,10 +1030,12 @@ function ouvrirModale(plante) {
 
   modale.querySelector(".fermer").addEventListener("click", fermerModale);
 
-  modale.addEventListener("click", e => {
+  if (modale._clicRot) modale.removeEventListener("click", modale._clicRot);
+  modale._clicRot = e => {
     const v = e.target.closest("[data-sachet]");
     if (v) ouvrirSachet(v.dataset.sachet);
-  });
+  };
+  modale.addEventListener("click", modale._clicRot);
 
   // Suivi de culture : liste des étapes + changement de date
   const champDate = modale.querySelector("#suivi-date");
@@ -1692,11 +1694,13 @@ function ouvrirModaleRessources() {
 
   const modale = $("#modale");
   modale.querySelector(".fermer").addEventListener("click", fermerModale);
-  modale.addEventListener("click", e => {
+  if (modale._clicRot) modale.removeEventListener("click", modale._clicRot);
+  modale._clicRot = e => {
     const add = e.target.closest("[data-add]"), sup = e.target.closest("[data-suppr]");
     if (add) { basculerRessource(add.dataset.add); ouvrirModaleRessources(); rendre(); }
     if (sup) { basculerRessource(sup.dataset.suppr); ouvrirModaleRessources(); rendre(); }
-  });
+  };
+  modale.addEventListener("click", modale._clicRot);
   $("#overlay").classList.add("ouvert");
   document.body.style.overflow = "hidden";
 }
@@ -1921,6 +1925,7 @@ function init() {
   $("#btn-plan").addEventListener("click", basculerPlan);
   chargerJardin();
   installerDessinPlan();
+  $("#btn-taille-jardin").addEventListener("click", ouvrirModaleTailleJardin);
   $("#bandeau-lune").addEventListener("click", ouvrirModaleLune);
   chargerRessources();
 
@@ -2101,10 +2106,13 @@ function ecranAssociation(filtre) {
       if (nouveau) { nouveau.focus(); nouveau.setSelectionRange(pos, pos); }
     }, 250);
   });
-  $("#modale").addEventListener("click", e => {
+  const modaleAssoc = $("#modale");
+  if (modaleAssoc._clicRot) modaleAssoc.removeEventListener("click", modaleAssoc._clicRot);
+  modaleAssoc._clicRot = e => {
     const b = e.target.closest("[data-plante]");
     if (b) ecranDetailsSachet(PLANTES.find(p => p.id === b.dataset.plante));
-  });
+  };
+  modaleAssoc.addEventListener("click", modaleAssoc._clicRot);
   $("#s-nouvelle").addEventListener("click", () => {
     // La photo reste en attente : elle sera rattachée à la plante créée.
     state._photoPourNouvelle = true;
@@ -2224,8 +2232,8 @@ function rendrePlan() {
   const g = $("#plan-grille");
   if (!g) return;
   g.style.setProperty("--maille", TAILLE_CASE_PX + "px");
-  g.style.width = GRILLE_COLS * TAILLE_CASE_PX + "px";
-  g.style.height = GRILLE_LIGNES * TAILLE_CASE_PX + "px";
+  g.style.width = jardin.cols * TAILLE_CASE_PX + "px";
+  g.style.height = jardin.lignes * TAILLE_CASE_PX + "px";
   g.replaceChildren();
 
   jardin.planches.forEach(p => g.appendChild(elementPlanche(p)));
@@ -2277,17 +2285,60 @@ function recolteCommencee(planche, plante) {
   return Boolean(recolte && recolte.date <= dateDuJour());
 }
 
-/* ---------- Dessin : clic simple = 1 m², glisser = taille libre ---------- */
+/* ---------- Modale : changer la taille du jardin (largeur × longueur) ---------- */
+function ouvrirModaleTailleJardin() {
+  const modale = $("#modale");
+  const largeurActuelle = jardin.cols * MAILLE_M;
+  const longueurActuelle = jardin.lignes * MAILLE_M;
+  modale.innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>📐 Taille du jardin</h2>
+      <p class="sous">En mètres, par pas de ${MAILLE_M} m. Les planches déjà posées doivent tenir dans le nouveau plan.</p>
+      <div class="fgrid">
+        <div class="fchamp"><label>Largeur (m)</label>
+          <input id="tj-largeur" type="number" min="${MAILLE_M}" step="${MAILLE_M}" value="${largeurActuelle}" /></div>
+        <div class="fchamp"><label>Longueur (m)</label>
+          <input id="tj-longueur" type="number" min="${MAILLE_M}" step="${MAILLE_M}" value="${longueurActuelle}" /></div>
+      </div>
+      <div class="form-erreur" id="tj-erreur" role="alert" hidden></div>
+      <div class="form-actions">
+        <button class="btn secondaire" id="tj-annuler">Annuler</button>
+        <button class="btn" id="tj-appliquer">Appliquer</button>
+      </div>
+    </div>`;
+
+  modale.querySelector(".fermer").addEventListener("click", fermerModale);
+  $("#tj-annuler").addEventListener("click", fermerModale);
+  $("#tj-appliquer").addEventListener("click", () => {
+    const largeur = parseFloat($("#tj-largeur").value);
+    const longueur = parseFloat($("#tj-longueur").value);
+    const erreur = $("#tj-erreur");
+    const resultat = redimensionnerJardin(largeur / MAILLE_M, longueur / MAILLE_M);
+    if (!resultat.ok) {
+      erreur.textContent = resultat.motif;
+      erreur.hidden = false;
+      return;
+    }
+    fermerModale();
+    rendrePlan();
+  });
+
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+
+/* ---------- Dessin : le doigt dessine, puis une validation explicite crée la planche ---------- */
 function installerDessinPlan() {
   const g = $("#plan-grille");
   if (!g) return;
-  let depart = null, apercu = null;
+  let depart = null, apercu = null, actions = null, rectAttente = null;
 
   const caseDepuisEvent = e => {
     const r = g.getBoundingClientRect();
     return {
-      x: Math.max(0, Math.min(GRILLE_COLS - 1, Math.floor((e.clientX - r.left) / TAILLE_CASE_PX))),
-      y: Math.max(0, Math.min(GRILLE_LIGNES - 1, Math.floor((e.clientY - r.top) / TAILLE_CASE_PX))),
+      x: Math.max(0, Math.min(jardin.cols - 1, Math.floor((e.clientX - r.left) / TAILLE_CASE_PX))),
+      y: Math.max(0, Math.min(jardin.lignes - 1, Math.floor((e.clientY - r.top) / TAILLE_CASE_PX))),
     };
   };
   const rectEntre = (a, b) => ({
@@ -2295,15 +2346,11 @@ function installerDessinPlan() {
     w: Math.abs(a.x - b.x) + 1, h: Math.abs(a.y - b.y) + 1,
   });
 
-  g.addEventListener("pointerdown", e => {
-    const surPlanche = e.target.closest("[data-planche]");
-    if (surPlanche) return;                       // clic sur une planche : géré ailleurs
-    depart = caseDepuisEvent(e);
-    g.setPointerCapture(e.pointerId);
-    apercu = el("div", "plan-apercu");
-    g.appendChild(apercu);
-    majApercu(rectEntre(depart, depart));
-  });
+  function retirerApercu() {
+    if (apercu) { apercu.remove(); apercu = null; }
+    if (actions) { actions.remove(); actions = null; }
+    rectAttente = null;
+  }
 
   function majApercu(r) {
     if (!apercu) return;
@@ -2315,6 +2362,52 @@ function installerDessinPlan() {
     apercu.style.borderColor = placeLibre(r) ? "" : "#c0392b";
   }
 
+  // Affiche le rectangle dessiné avec deux boutons ✓ / ✕ : rien n'est créé
+  // tant que l'utilisateur n'a pas explicitement validé.
+  function proposerValidation(r) {
+    rectAttente = r;
+    majApercu(r);
+    apercu.classList.add("en-attente");
+
+    actions = el("div", "plan-valider-actions");
+    actions.innerHTML = `
+      <button type="button" class="annuler" aria-label="Annuler cette planche">✕</button>
+      <button type="button" class="valider" aria-label="Valider cette planche">✓</button>`;
+    g.appendChild(actions);
+
+    const largeur = 2 * 44 + 8;
+    let left = r.x * TAILLE_CASE_PX;
+    left = Math.max(0, Math.min(left, jardin.cols * TAILLE_CASE_PX - largeur));
+    const dessousOk = (r.y + r.h) * TAILLE_CASE_PX + 52 <= jardin.lignes * TAILLE_CASE_PX;
+    const top = dessousOk ? (r.y + r.h) * TAILLE_CASE_PX + 6 : Math.max(0, r.y * TAILLE_CASE_PX - 52);
+    actions.style.left = left + "px";
+    actions.style.top = top + "px";
+
+    actions.querySelector(".annuler").addEventListener("click", () => retirerApercu());
+    actions.querySelector(".valider").addEventListener("click", () => {
+      if (!placeLibre(rectAttente)) {
+        ouvrirMessage("Emplacement occupé", "Une planche se trouve déjà à cet endroit. "
+          + "Dessine ailleurs, ou supprime la planche existante.");
+        return;
+      }
+      const nouvelle = creerPlanche(rectAttente.x, rectAttente.y, rectAttente.w, rectAttente.h);
+      retirerApercu();
+      rendrePlan();
+      if (nouvelle) ouvrirModalePlanche(nouvelle.id);
+    });
+  }
+
+  g.addEventListener("pointerdown", e => {
+    if (rectAttente) return;                       // une planche attend déjà d'être validée
+    const surPlanche = e.target.closest("[data-planche]");
+    if (surPlanche) return;                       // clic sur une planche : géré ailleurs
+    depart = caseDepuisEvent(e);
+    g.setPointerCapture(e.pointerId);
+    apercu = el("div", "plan-apercu");
+    g.appendChild(apercu);
+    majApercu(rectEntre(depart, depart));
+  });
+
   g.addEventListener("pointermove", e => {
     if (!depart) return;
     majApercu(rectEntre(depart, caseDepuisEvent(e)));
@@ -2324,30 +2417,23 @@ function installerDessinPlan() {
     if (!depart) return;
     const fin = caseDepuisEvent(e);
     let r = rectEntre(depart, fin);
-    // Clic simple (une seule case) → planche d'1 m² (2 × 2 mailles)
+    // Doigt levé sans avoir bougé (tap simple) → planche d'1 m² (2 × 2 mailles)
     if (r.w === 1 && r.h === 1) {
-      const carre = { x: Math.min(r.x, GRILLE_COLS - 2), y: Math.min(r.y, GRILLE_LIGNES - 2), w: 2, h: 2 };
+      const carre = { x: Math.min(r.x, jardin.cols - 2), y: Math.min(r.y, jardin.lignes - 2), w: 2, h: 2 };
       if (placeLibre(carre)) r = carre;
     }
-    if (apercu) { apercu.remove(); apercu = null; }
     depart = null;
-    if (!placeLibre(r)) {
-      ouvrirMessage("Emplacement occupé", "Une planche se trouve déjà à cet endroit. "
-        + "Dessine ailleurs, ou supprime la planche existante.");
-      return;
-    }
-    const p = creerPlanche(r.x, r.y, r.w, r.h);
-    rendrePlan();
-    if (p) ouvrirModalePlanche(p.id);
+    proposerValidation(r);
   };
   g.addEventListener("pointerup", terminer);
   g.addEventListener("pointercancel", () => {
-    if (apercu) { apercu.remove(); apercu = null; }
+    if (apercu && !rectAttente) { apercu.remove(); apercu = null; }
     depart = null;
   });
 
   // Clic sur une planche existante
   g.addEventListener("click", e => {
+    if (e.target.closest(".plan-valider-actions")) return;
     const b = e.target.closest("[data-planche]");
     if (b) ouvrirModalePlanche(b.dataset.planche);
   });
@@ -2412,7 +2498,8 @@ function ouvrirModalePlanche(id) {
     rendrePlan();
     ouvrirModalePlanche(p.id);        // enchaîne sur les suggestions de rotation
   });
-  modale.addEventListener("click", e => {
+  if (modale._clicRot) modale.removeEventListener("click", modale._clicRot);
+  modale._clicRot = e => {
     const b = e.target.closest("[data-rot]");
     if (!b) return;
     planterDans(p, b.dataset.rot, dateDuJour().toISOString().slice(0, 10));
@@ -2420,7 +2507,8 @@ function ouvrirModalePlanche(id) {
     if (pl && !estAdoptee(pl.id)) { state.adoptees.add(pl.id); sauverAdoptees(); }
     if (pl) { state.dates[pl.id] = dateDuJour().toISOString().slice(0, 10); sauverDates(); }
     rendrePlan(); rendre(); ouvrirModalePlanche(p.id);
-  });
+  };
+  modale.addEventListener("click", modale._clicRot);
 
   $("#overlay").classList.add("ouvert");
   document.body.style.overflow = "hidden";

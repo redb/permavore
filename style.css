@@ -188,8 +188,11 @@ body.configure .filtres { margin-top: 16px; }
 .fchamp textarea { resize: vertical; min-height: 54px; }
 .fchamp.inline { flex-direction: row; align-items: center; gap: 8px; }
 .fchamp.inline input { width: auto; }
-.form-actions { display: flex; gap: 10px; margin-top: 18px; }
-.form-actions .btn { flex: 1; }
+.form-actions {
+  display: flex; gap: 10px; margin-top: 18px;
+  position: sticky; bottom: 0; padding: 12px 0 4px; background: var(--sable);
+}
+.form-actions .btn { flex: 1; min-height: 44px; }
 .form-erreur {
   margin-top: 14px;
   padding: 10px 12px;
@@ -557,6 +560,16 @@ footer strong { color: var(--vert-fonce); }
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 800; color: var(--vert-fonce);
 }
+.plan-apercu.en-attente { border-style: solid; background: rgba(47,125,71,.22); }
+.plan-valider-actions {
+  position: absolute; z-index: 6; display: flex; gap: 8px;
+}
+.plan-valider-actions button {
+  width: 44px; height: 44px; border-radius: 50%; border: none; font-size: 18px; font-weight: 800;
+  box-shadow: var(--ombre-forte); cursor: pointer;
+}
+.plan-valider-actions .valider { background: var(--vert-fonce); color: #fff; }
+.plan-valider-actions .annuler { background: #fff; color: #c0392b; }
 .plan-legende {
   display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px;
   font-size: 12.5px; color: var(--texte-doux);

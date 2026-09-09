@@ -18,8 +18,10 @@
 
 const MAILLE_M = 0.5;                       // côté d'une case, en mètres
 const M2_PAR_CASE = MAILLE_M * MAILLE_M;    // 0,25 m²
-const GRILLE_COLS = 20;                     // 10 m de large
-const GRILLE_LIGNES = 16;                   // 8 m de profondeur
+const GRILLE_COLS_DEFAUT = 20;              // 10 m de large
+const GRILLE_LIGNES_DEFAUT = 16;            // 8 m de profondeur
+const GRILLE_MIN = 2;                       // 1 m minimum
+const GRILLE_MAX = 60;                      // 30 m maximum
 const LS_PLAN = "permavore.plan";
 
 // Ordre du cycle de fertilité
@@ -40,17 +42,48 @@ function typeRotation(plante) {
 }
 
 /* ---------- État et persistance ---------- */
-const jardin = { planches: [] };
+const jardin = { planches: [], cols: GRILLE_COLS_DEFAUT, lignes: GRILLE_LIGNES_DEFAUT };
 
 function chargerJardin() {
   try {
     const brut = JSON.parse(localStorage.getItem(LS_PLAN) || "null");
     jardin.planches = (brut && Array.isArray(brut.planches)) ? brut.planches : [];
-  } catch (e) { jardin.planches = []; }
+    jardin.cols = (brut && Number.isFinite(brut.cols)) ? brut.cols : GRILLE_COLS_DEFAUT;
+    jardin.lignes = (brut && Number.isFinite(brut.lignes)) ? brut.lignes : GRILLE_LIGNES_DEFAUT;
+  } catch (e) {
+    jardin.planches = [];
+    jardin.cols = GRILLE_COLS_DEFAUT;
+    jardin.lignes = GRILLE_LIGNES_DEFAUT;
+  }
 }
 function sauverJardin() {
-  try { localStorage.setItem(LS_PLAN, JSON.stringify({ planches: jardin.planches })); }
-  catch (e) { /* quota : on n'interrompt pas l'utilisateur */ }
+  try {
+    localStorage.setItem(LS_PLAN, JSON.stringify({
+      planches: jardin.planches, cols: jardin.cols, lignes: jardin.lignes,
+    }));
+  } catch (e) { /* quota : on n'interrompt pas l'utilisateur */ }
+}
+
+/**
+ * Change la taille de la grille (en cases de 0,5 m). Refuse si une planche
+ * existante déborderait des nouvelles limites.
+ * @returns {{ok:true}|{ok:false, motif:string}}
+ */
+function redimensionnerJardin(cols, lignes) {
+  cols = Math.round(cols); lignes = Math.round(lignes);
+  if (!Number.isFinite(cols) || !Number.isFinite(lignes)
+    || cols < GRILLE_MIN || lignes < GRILLE_MIN || cols > GRILLE_MAX || lignes > GRILLE_MAX) {
+    return { ok: false, motif: `Largeur et longueur doivent être entre ${GRILLE_MIN * MAILLE_M} `
+      + `et ${GRILLE_MAX * MAILLE_M} m.` };
+  }
+  const deborde = jardin.planches.some(p => p.x + p.w > cols || p.y + p.h > lignes);
+  if (deborde) {
+    return { ok: false, motif: "Une ou plusieurs planches existantes sortiraient du nouveau plan. "
+      + "Déplace ou supprime-les d'abord, ou choisis une taille plus grande." };
+  }
+  jardin.cols = cols; jardin.lignes = lignes;
+  sauverJardin();
+  return { ok: true };
 }
 
 function surfacePlanche(p) { return p.w * p.h * M2_PAR_CASE; }
