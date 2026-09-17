@@ -128,7 +128,17 @@ export async function onRequestPost({ request, env }) {
   // Pl@ntNet renvoie 404 quand aucune espèce n'est reconnue : ce n'est pas une panne.
   if (reponse.status === 404) return json({ resultats: [], restant: null });
   if (reponse.status === 429) return json({ erreur: "quota_service_epuise" }, 429);
-  if (reponse.status === 401 || reponse.status === 403) return json({ erreur: "cle_refusee" }, 502);
+  if (reponse.status === 401 || reponse.status === 403) {
+    // Motif renvoyé par Pl@ntNet (clé invalide, IP ou domaine non autorisé…),
+    // tronqué et nettoyé de toute trace de la clé avant d'être exposé.
+    let motif = "";
+    try {
+      const corps = await reponse.text();
+      try { motif = String(JSON.parse(corps).message || ""); } catch { motif = corps; }
+    } catch { /* corps illisible : pas de motif */ }
+    motif = motif.split(env.PLANTNET_API_KEY).join("[clé]").replace(/\s+/g, " ").slice(0, 160);
+    return json({ erreur: "cle_refusee", statut: reponse.status, motif }, 502);
+  }
   if (!reponse.ok) return json({ erreur: "service_erreur", statut: reponse.status }, 502);
 
   let donnees;
