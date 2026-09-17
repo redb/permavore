@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   profilClimatique, classifierKoppen, zoneUSDA, zoneChaleurAHS, et0Hargreaves,
   compatibiliteActuelle, tendance, valeurUtilisable, ecartSignificatif,
+  synthesePreuves, HEURISTIQUES_MOTEUR,
 } from "../climat-core.mjs";
 import { fenetres } from "../functions/api/climat.js";
 
@@ -25,6 +26,13 @@ function serie({ tmoy = 11, amplitude = 9, dephasage = 6, pluie = 2.5,
 }
 
 const source = (valeur, unite) => ({ valeur, unite, source: "test", url: "x", confiance: "haute" });
+
+/** Fabrique une preuve locale de test. Par défaut : observation de jardinier. */
+const preuve = (champs = {}) => ({
+  type: "observationJardinier", fort: false, resultat: "pousse", distance: 3,
+  date: "2026", lieu: { nom: "ici" }, source: "un jardinier", confiance: "haute",
+  environnement: "pleine_terre", ...champs,
+});
 
 test("un même climat donne le même profil dans les deux hémisphères", () => {
   const nord = profilClimatique(serie({ dephasage: 6 }), 45);
@@ -197,29 +205,84 @@ test("une exigence documentée mais non mesurable interdit le classement « épr
   assert.equal(r.confiance, "moyenne");
 });
 
-test("le retour d'un jardinier du coin tranche ce que les seuils laissent ouvert", () => {
-  // Patate douce en climat tempéré : la chaleur nécessaire est documentée mais
-  // non mesurable, donc « expérimental ». Un jardinier qui la cultive à 3 km
-  // répond précisément à cette question : la culture devient « éprouvée » ICI.
+test("un succès local isolé ne produit pas « éprouvé »", () => {
   const tempere = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
   const culture = {
+    cultiveeComme: "annuelle",
     cycle: { joursMaturite: source(120, "jours") },
     chaleur: { seuilMinCroissance: source(25, "°C") },
     eau: { sensibiliteDeficit: source(1, "1-3") },
   };
-  // Un retour isolé « ça pousse » renseigne la faisabilité et remonte la
-  // confiance, mais ne démontre pas une réussite régulière.
-  const retour = [{ resultat: "pousse", distance: 3, annee: 2026,
-    lieu: { nom: "Rumilly" }, source: "un jardinier", confiance: "haute" }];
-  const avec = compatibiliteActuelle(culture, tempere, retour);
-  assert.equal(avec.compatibilite, "compatible");
-  assert.equal(avec.statutLocal, "indetermine");
-  assert.equal(avec.dimensions.retourLocal.positif, true);
-  assert.equal(avec.contradiction, false);
+  const un = [preuve({ resultat: "pousse" })];
+  const r = compatibiliteActuelle(culture, tempere, un);
+  assert.equal(r.compatibilite, "compatible");
+  assert.equal(r.statutLocal, "indetermine", "une observation n'est pas une conclusion");
+  assert.equal(r.dimensions.preuvesLocales.conclut, false);
 
-  // Trois retours concordants, eux, démontrent quelque chose.
-  const trois = [0, 1, 2].map(i => ({ ...retour[0], distance: 3 + i }));
+  // Trois observations concordantes, en revanche, démontrent quelque chose.
+  const trois = [0, 1, 2].map(i => preuve({ resultat: "pousse", distance: 3 + i }));
   assert.equal(compatibiliteActuelle(culture, tempere, trois).statutLocal, "eprouve");
+});
+
+test("un échec local isolé ne produit pas « expérimental »", () => {
+  const doux = profilClimatique(serie({ tmoy: 16, amplitude: 8 }), 40);
+  const culture = { cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(120, "jours"), degresJours10Min: source(1200, "dj") } };
+  const r = compatibiliteActuelle(culture, doux, [preuve({ resultat: "echec" })]);
+  assert.equal(r.statutLocal, "eprouve",
+    "un échec isolé ne renverse pas des exigences quantifiées toutes tenues");
+  assert.equal(r.dimensions.preuvesLocales.conclut, false);
+
+  // Des échecs répétés, eux, comptent.
+  const echecs = [0, 1, 2].map(i => preuve({ resultat: "echec", distance: 2 + i }));
+  assert.equal(compatibiliteActuelle(culture, doux, echecs).statutLocal, "experimental");
+});
+
+test("des observations contradictoires ne fabriquent aucune conclusion", () => {
+  const doux = profilClimatique(serie({ tmoy: 16, amplitude: 8 }), 40);
+  const culture = { cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(120, "jours"), degresJours10Min: source(1200, "dj") } };
+  const melange = [preuve({ resultat: "recolte" }), preuve({ resultat: "echec", distance: 4 }),
+                   preuve({ resultat: "pousse", distance: 6 }), preuve({ resultat: "echec", distance: 8 })];
+  const r = compatibiliteActuelle(culture, doux, melange);
+  assert.equal(r.dimensions.preuvesLocales.contradictoire, true);
+  assert.equal(r.statutLocal, "indetermine", "pas de moyenne artificielle");
+});
+
+test("une preuve agronomique locale solide peut suffire à établir « éprouvé »", () => {
+  const tempere = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+  const culture = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(120, "jours") },
+    chaleur: { seuilMinCroissance: source(25, "°C") },   // non quantifiable
+  };
+  assert.equal(compatibiliteActuelle(culture, tempere).statutLocal, "indetermine");
+  const essai = [preuve({ type: "essaiVarietal", fort: true, resultat: "recolteReguliere",
+    source: "essai variétal d'un institut technique" })];
+  const r = compatibiliteActuelle(culture, tempere, essai);
+  assert.equal(r.statutLocal, "eprouve");
+  assert.equal(r.dimensions.preuvesLocales.fortes, 1);
+});
+
+test("les heuristiques du moteur sont nommées et centralisées, jamais des données", () => {
+  assert.equal(typeof HEURISTIQUES_MOTEUR.margeDureeRelative, "number");
+  assert.equal(HEURISTIQUES_MOTEUR.margeTemperatureC, 3);
+  assert.match(HEURISTIQUES_MOTEUR.origine, /non sourcée/);
+  // Aucune heuristique ne doit porter de champ « source » : ce ne sont pas des
+  // données agronomiques, et rien ne doit pouvoir les confondre avec.
+  assert.equal(valeurUtilisable(HEURISTIQUES_MOTEUR), false);
+});
+
+test("la synthèse distingue le nombre, la force et la contradiction", () => {
+  assert.equal(synthesePreuves([]).total, 0);
+  assert.equal(synthesePreuves([preuve({ resultat: "pousse" })]).conclut, false);
+  const fortes = synthesePreuves([preuve({ type: "institutTechnique", fort: true, resultat: "recolte" })]);
+  assert.equal(fortes.demontrePositif, true);
+  const opposees = synthesePreuves([
+    preuve({ type: "institutTechnique", fort: true, resultat: "recolte" }),
+    preuve({ type: "universite", fort: true, resultat: "echec" })]);
+  assert.equal(opposees.contradictoire, true);
+  assert.equal(opposees.conclut, false);
 });
 
 test("un retour positif ne masque pas un seuil bloquant : il le met en doute", () => {
@@ -227,9 +290,7 @@ test("un retour positif ne masque pas un seuil bloquant : il le met en doute", (
   const culture = {
     cycle: { joursMaturite: source(200, "jours"), degresJours10Min: source(2000, "dj") },
   };
-  const retour = [{ resultat: "recolte", distance: 5, annee: 2026,
-    lieu: { nom: "quelque part" }, source: "un jardinier", confiance: "haute" }];
-  const r = compatibiliteActuelle(culture, froid, retour);
+  const r = compatibiliteActuelle(culture, froid, [preuve({ resultat: "recolte", distance: 5 })]);
   assert.equal(r.compatibilite, "incompatible", "le seuil bloquant reste affiché");
   assert.equal(r.contradiction, true, "mais la contradiction est signalée");
 });
@@ -239,10 +300,9 @@ test("un échec rapporté sur place empêche le classement « éprouvé »", () 
   const culture = { cycle: { joursMaturite: source(120, "jours"),
                              degresJours10Min: source(1200, "dj") } };
   assert.equal(compatibiliteActuelle(culture, doux).statutLocal, "eprouve");
-  const echec = [{ resultat: "echec", distance: 2, annee: 2026,
-    lieu: { nom: "ici" }, source: "un jardinier", confiance: "haute" }];
-  const r = compatibiliteActuelle(culture, doux, echec);
-  assert.equal(r.statutLocal, "experimental", "un échec sur place retire « éprouvé »");
+  const echecs = [0, 1, 2].map(i => preuve({ resultat: "echec", distance: 2 + i }));
+  const r = compatibiliteActuelle(culture, doux, echecs);
+  assert.equal(r.statutLocal, "experimental", "des échecs répétés retirent « éprouvé »");
   assert.equal(r.compatibilite, "compatible", "sans rendre la culture impossible");
 });
 
@@ -338,15 +398,13 @@ test("un seul retour « ça pousse » ne suffit pas à démontrer « éprouvé �
     cycle: { joursMaturite: source(120, "jours") },
     chaleur: { seuilMinCroissance: source(25, "°C") },
   };
-  const unRetour = [{ resultat: "pousse", distance: 5, annee: 2026,
-    lieu: { nom: "Rumilly" }, source: "un jardinier", confiance: "haute" }];
-  const r = compatibiliteActuelle(culture, lieu, unRetour);
+  const r = compatibiliteActuelle(culture, lieu, [preuve({ resultat: "pousse", distance: 5 })]);
   assert.equal(r.compatibilite, "compatible");
   assert.equal(r.statutLocal, "indetermine", "« pousse » n'est pas « réussit régulièrement »");
   assert.equal(r.confiance, "moyenne");
 
-  const reguliere = [{ ...unRetour[0], resultat: "recolteReguliere" }];
-  assert.equal(compatibiliteActuelle(culture, lieu, reguliere).statutLocal, "eprouve");
+  const trois = [0, 1, 2].map(i => preuve({ resultat: "recolte", distance: 5 + i }));
+  assert.equal(compatibiliteActuelle(culture, lieu, trois).statutLocal, "eprouve");
 });
 
 test("un abri dont on ne sait rien ne rend jamais le verdict meilleur", async () => {

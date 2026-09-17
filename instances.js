@@ -18,6 +18,7 @@
    ========================================================================= */
 
 const LS_INSTANCES = "permavore.instances.v1";
+const LS_ZONES = "permavore.zones.v1";
 
 // États d'une instance. L'ordre est celui du cycle de vie.
 const ETATS_INSTANCE = ["prevu", "seme", "plante", "dejaPresent", "termine"];
@@ -27,12 +28,68 @@ const PRECISIONS_DATE = ["exacte", "mois", "saison", "annee", "anneeApprox", "in
 
 let INSTANCES = [];
 
+/*
+   Hiérarchie du jardin :
+
+       InstanceCulture  →  Zone  →  EnvironnementCulture
+
+   L'environnement se déclare UNE fois, sur la zone (« la serre »), et toutes
+   les cultures qui y poussent en héritent. Une instance peut le surcharger si
+   elle fait exception, mais on ne répète jamais les caractéristiques de la
+   serre sur chaque plante.
+*/
+let ZONES = [];
+
 function chargerInstances() {
   try {
     const brut = JSON.parse(localStorage.getItem(LS_INSTANCES) || "[]");
     INSTANCES = Array.isArray(brut) ? brut.filter(i => i && i.cultureId) : [];
   } catch { INSTANCES = []; }
   return INSTANCES;
+}
+
+function chargerZones() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(LS_ZONES) || "[]");
+    ZONES = Array.isArray(brut) ? brut.filter(z => z && z.id) : [];
+  } catch { ZONES = []; }
+  return ZONES;
+}
+
+function sauverZones() {
+  try { localStorage.setItem(LS_ZONES, JSON.stringify(ZONES)); }
+  catch { /* stockage refusé */ }
+}
+
+/** Crée ou met à jour une zone et son environnement. */
+function definirZone(id, champs = {}) {
+  let z = ZONES.find(x => x.id === id);
+  if (!z) { z = { id: id || nouvelIdentifiant(), cree: new Date().toISOString() }; ZONES.push(z); }
+  if ("nom" in champs) z.nom = champs.nom || null;
+  if ("environnement" in champs) z.environnement = champs.environnement || null;
+  if ("proprietes" in champs) z.proprietes = champs.proprietes || null;
+  z.maj = new Date().toISOString();
+  sauverZones();
+  return z;
+}
+
+const zone = (id) => ZONES.find(z => z.id === id) || null;
+
+/**
+ * Environnement effectif d'une instance : sa surcharge si elle en a une, sinon
+ * celui de sa zone, sinon la pleine terre. On ne suppose jamais mieux.
+ */
+function environnementDe(instance) {
+  if (!instance) return { type: "pleine_terre", origine: "defaut", proprietes: null };
+  if (instance.environnement) {
+    return { type: instance.environnement, origine: "instance", proprietes: instance.proprietesEnv || null };
+  }
+  const z = zone(instance.zoneId);
+  if (z && z.environnement) {
+    return { type: z.environnement, origine: "zone", zoneId: z.id, nom: z.nom || null,
+             proprietes: z.proprietes || null };
+  }
+  return { type: "pleine_terre", origine: "defaut", proprietes: null };
 }
 
 function sauverInstances() {
@@ -58,7 +115,10 @@ function enraciner(cultureId, options = {}) {
     depuis,
     // Où pousse-t-elle réellement : pleine terre, serre, intérieur… Le moteur
     // en a besoin, car une culture difficile dehors peut être évidente sous abri.
-    environnement: options.environnement || "pleine_terre",
+    // Rien par défaut : l'environnement vient de la zone. Une valeur ici est
+    // une surcharge explicite, pas une supposition.
+    environnement: options.environnement || null,
+    zoneId: options.zoneId || null,
     emplacement: options.emplacement || null,
     surface: Number.isFinite(options.surface) ? options.surface : null,
     quantite: Number.isFinite(options.quantite) ? options.quantite : null,
@@ -85,7 +145,8 @@ function majInstance(id, champs = {}) {
   if (!i) return null;
   if (champs.etat && ETATS_INSTANCE.includes(champs.etat)) i.etat = champs.etat;
   if (champs.depuis) i.depuis = normaliserDepuis(champs.depuis);
-  if ("environnement" in champs) i.environnement = champs.environnement || "pleine_terre";
+  if ("environnement" in champs) i.environnement = champs.environnement || null;
+  if ("zoneId" in champs) i.zoneId = champs.zoneId || null;
   if ("emplacement" in champs) i.emplacement = champs.emplacement || null;
   if ("surface" in champs) i.surface = Number.isFinite(champs.surface) ? champs.surface : null;
   if ("quantite" in champs) i.quantite = Number.isFinite(champs.quantite) ? champs.quantite : null;
@@ -132,7 +193,7 @@ function migrerAdoptees(adoptees, dates) {
       etat: "plante",
       // L'ancien stockage ne disait pas où : on ne suppose donc rien de plus
       // que le cas le plus courant, et le jardinier pourra corriger.
-      environnement: "pleine_terre",
+      environnement: null,          // inconnu : la zone décidera, à défaut pleine terre
       depuis: iso ? { precision: "exacte", valeur: iso } : { precision: "inconnue" },
     });
     reprises++;
@@ -141,11 +202,13 @@ function migrerAdoptees(adoptees, dates) {
 }
 
 chargerInstances();
+chargerZones();
 
 if (typeof window !== "undefined") {
   window.Instances = {
     enraciner, majInstance, deraciner, instancesDe, estEnracinee,
     culturesEnracinees, migrerAdoptees, charger: chargerInstances,
+    definirZone, zone, zones: () => [...ZONES], environnementDe,
     ETATS: ETATS_INSTANCE, PRECISIONS: PRECISIONS_DATE,
   };
 }

@@ -952,3 +952,5 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
   border-radius:8px;padding:.45rem .6rem;margin:.5rem 0 0;line-height:1.45}
 .agro-badge{display:inline-block;background:rgba(63,107,70,.12);border-radius:999px;
   padding:.1rem .5rem;font-size:.88rem;margin-left:.3rem}
+.agro-preuve{display:block;width:100%;font-size:.86rem;margin-top:.25rem;opacity:.9}
+.agro-preuve em{opacity:.75;font-size:.82rem}

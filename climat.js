@@ -84,11 +84,11 @@ export async function chargerClimat(lat, lng) {
 const profil = () => etat.donnees?.profilClimatiqueLieu || null;
 const projection = () => etat.donnees?.projectionClimatiqueLieu || null;
 
-/** Retours de jardiniers autour du point courant, pour cette culture. */
-function retoursLocaux(cultureId) {
+/** Preuves locales autour du point courant, pour cette culture. */
+function preuvesLocales(cultureId, environnement) {
   const l = etat.donnees?.lieu;
-  if (!l || !window.RetoursLocaux) return [];
-  return window.RetoursLocaux.retoursPour(cultureId, l.latitude, l.longitude);
+  if (!l || !window.PreuvesLocales) return [];
+  return window.PreuvesLocales.preuvesPour(cultureId, l.latitude, l.longitude, { environnement });
 }
 
 /**
@@ -108,7 +108,7 @@ function compatibilite(culture, cultureId, typeEnvironnement = "pleine_terre", d
       dimensions: {}, dimensionsDocumentees: 0, contradiction: false,
       environnement: env, raison: sous.raison };
   }
-  const r = compatibiliteActuelle(culture, sous.profil, retoursLocaux(cultureId));
+  const r = compatibiliteActuelle(culture, sous.profil, preuvesLocales(cultureId, typeEnvironnement));
   return { ...r, environnement: env };
 }
 
@@ -122,7 +122,7 @@ function tendanceCulture(culture) {
 window.Climat = {
   charger: chargerClimat,
   profil, projection,
-  compatibilite, tendance: tendanceCulture, retoursLocaux,
+  compatibilite, tendance: tendanceCulture, preuvesLocales,
   climat: () => etat.donnees?.climat || null,
   zoneInterne: () => etat.donnees?.zoneInterne || null,
   tracabilite: () => etat.donnees?.tracabilite || null,

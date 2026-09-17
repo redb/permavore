@@ -550,7 +550,7 @@ function ouvrirEnracinement(cultureId) {
     window.Instances.enraciner(cultureId, {
       etat: etatChoisi || "plante",
       depuis: { precision, valeur },
-      environnement: p.querySelector("#enr-environnement")?.value || "pleine_terre",
+      environnement: p.querySelector("#enr-environnement")?.value || null,
       emplacement: p.querySelector("#enr-emplacement")?.value.trim() || null,
       surface: lire("#enr-surface"),
       quantite: lire("#enr-quantite"),
@@ -2662,7 +2662,7 @@ const LIBELLE_DIMENSION = {
   cycle: "agro.dim.cycle", chaleurCumulee: "agro.dim.chaleurCumulee",
   rusticite: "agro.dim.rusticite", froidHivernal: "agro.dim.froidHivernal",
   stressThermique: "agro.dim.stressThermique", eau: "agro.dim.eau",
-  besoinChaleur: "agro.dim.besoinChaleur", retourLocal: "agro.dim.retourLocal",
+  besoinChaleur: "agro.dim.besoinChaleur", preuvesLocales: "agro.dim.preuves",
 };
 
 /** Détail « Pourquoi ? » : une ligne par dimension réellement documentée. */
@@ -2675,12 +2675,23 @@ function detailCompatibiliteHTML(compat, tend) {
       ? t("agro.chezToi", { valeur: nombreFR(d.lieu), unite: echapperHTML(d.unite || "") })
       : "";
     if (d.temoignage) {
+      // Les preuves sont affichées comme des observations datées et attribuées,
+      // jamais transformées en mesure. Leur nombre est visible, car c'est lui
+      // qui fait — ou non — une conclusion.
+      const lignes = (d.exemples || []).map(e => `<span class="agro-preuve">
+        ${t("agro.preuve.type." + e.type)} · ${t("agro.retour." + e.resultat)}
+        ${e.lieu ? "— " + echapperHTML(e.lieu) : ""}${
+          Number.isFinite(e.distance) ? " (" + e.distance + " km)" : ""}
+        <em>${echapperHTML(e.source || "")}${e.date ? ", " + echapperHTML(String(e.date)) : ""}</em>
+      </span>`).join("");
+      const verdict = d.contradictoire ? t("agro.preuve.contradictoires")
+        : d.conclut ? t("agro.preuve.conclut", { n: d.total })
+        : t("agro.preuve.insuffisant", { n: d.total });
       return `<li class="agro-dim agro-${d.etat} agro-temoignage">
-        <span class="agro-nom">${t("agro.dim.retourLocal")}</span>
-        <span class="agro-valeurs">${t("agro.retour." + d.resultat)} — ${t("agro.retour.lieu", {
-          lieu: echapperHTML(d.lieu || ""), distance: d.distance })}</span>
-        <em class="agro-reserve">${echapperHTML(d.source?.source || "")}${
-          d.source?.annee ? ", " + d.source.annee : ""}. ${t("agro.retour.nature")}</em>
+        <span class="agro-nom">${t("agro.dim.preuves")}</span>
+        <span class="agro-valeurs">${verdict}</span>
+        ${lignes}
+        <em class="agro-reserve">${t("agro.preuve.nature")}</em>
       </li>`;
     }
     const effet = (tend?.effets || []).find(e => e.dimension === cle);

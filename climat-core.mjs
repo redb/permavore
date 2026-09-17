@@ -421,11 +421,31 @@ export function valeurUtilisable(v) {
 }
 
 /*
-   Marge de confort. Attention : ce n'est PAS une valeur agronomique sourcée,
-   c'est une politique de prudence assumée du moteur — « tenir tout juste » n'est
-   pas « tenir confortablement ». Elle ne crée jamais un seuil : elle nuance un
-   seuil déjà sourcé, et elle est la même pour toutes les cultures.
+   HEURISTIQUES DU MOTEUR — ce ne sont PAS des données agronomiques.
+
+   Aucune de ces valeurs ne provient d'une source scientifique. Ce sont des
+   règles de prudence du moteur : « tenir tout juste » n'est pas « tenir
+   confortablement ». Elles ne créent jamais un seuil, elles nuancent un seuil
+   déjà sourcé, et elles sont identiques pour toutes les cultures — ce qui est
+   précisément leur défaut.
+
+   TODO architectural : remplacer progressivement ces marges globales par des
+   incertitudes propres à chaque indicateur, à chaque culture et à chaque source
+   (intervalle de confiance de la mesure, amplitude variétale, désaccord entre
+   sources) dès que ces informations existent dans la base. Tant qu'elles
+   n'existent pas, ces heuristiques restent visibles et remplaçables ici, en un
+   seul endroit, plutôt que dispersées dans le code.
 */
+export const HEURISTIQUES_MOTEUR = {
+  margeDureeRelative: 0.15,        // durées : 15 % au-delà du requis = confortable
+  margeTemperatureC: 3,            // rusticité : 3 °C de battement
+  margeFroidRelative: 0.20,        // besoin en froid : 20 % au-delà du requis
+  margeChaleurRelative: 0.25,      // besoin de chaleur quantifié : 25 %
+  observationsPourConclure: 3,     // nombre d'observations concordantes exigé
+  partPourConcordance: 0.75,       // part d'observations allant dans le même sens
+  origine: "heuristique du moteur Permavore, non sourcée, remplaçable",
+};
+
 const etatDepuisMarges = (valeurLieu, requis, margeConfort) => {
   if (valeurLieu >= requis + margeConfort) return "favorable";
   if (valeurLieu >= requis) return "limite";
@@ -483,7 +503,7 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
     const requis = sourceSaison.valeur;
     dimensions.cycle = {
       etat: profilLieu.sansGelToutelAnnee ? CONFORTABLE
-        : etatDepuisMarges(profilLieu.saisonSansGel, requis, Math.max(20, requis * 0.15)),
+        : etatDepuisMarges(profilLieu.saisonSansGel, requis, Math.max(20, requis * HEURISTIQUES_MOTEUR.margeDureeRelative)),
       lieu: profilLieu.saisonSansGel, requis, unite: "jours",
       bloquant: true, source: sourceSaison, derive: saisonDerivee,
       axe: "cycleAnnuel",
@@ -494,7 +514,7 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   if (valeurUtilisable(c.cycle?.degresJours10Min) && Number.isFinite(profilLieu.degresJours10)) {
     const requis = c.cycle.degresJours10Min.valeur;
     dimensions.chaleurCumulee = {
-      etat: etatDepuisMarges(profilLieu.degresJours10, requis, requis * 0.15),
+      etat: etatDepuisMarges(profilLieu.degresJours10, requis, requis * HEURISTIQUES_MOTEUR.margeDureeRelative),
       lieu: profilLieu.degresJours10, requis, unite: "degrés-jours base 10",
       bloquant: true, source: c.cycle.degresJours10Min, axe: "cycleAnnuel",
     };
@@ -506,7 +526,7 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
       && Number.isFinite(profilLieu.minimumHivernal)) {
     const requis = c.rusticite.tempMinTolere.valeur;
     dimensions.rusticite = {
-      etat: etatDepuisMarges(profilLieu.minimumHivernal, requis, 3),
+      etat: etatDepuisMarges(profilLieu.minimumHivernal, requis, HEURISTIQUES_MOTEUR.margeTemperatureC),
       lieu: profilLieu.minimumHivernal, requis, unite: "°C",
       bloquant: true, source: c.rusticite.tempMinTolere, axe: "survieHiver",
     };
@@ -517,7 +537,7 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
       && Number.isFinite(profilLieu.heuresFroid)) {
     const requis = c.froidHivernal.heuresFroidMin.valeur;
     dimensions.froidHivernal = {
-      etat: etatDepuisMarges(profilLieu.heuresFroid, requis, requis * 0.2),
+      etat: etatDepuisMarges(profilLieu.heuresFroid, requis, requis * HEURISTIQUES_MOTEUR.margeFroidRelative),
       lieu: profilLieu.heuresFroid, requis, unite: "heures sous 7,2 °C",
       bloquant: true, source: c.froidHivernal.heuresFroidMin,
       estimation: true, axe: "survieHiver",
@@ -551,7 +571,7 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
       if (valeurUtilisable(requis)) {
         dimensions.besoinChaleur = { ...d, bloquant: true, axe: "cycleAnnuel",
           requis: requis.valeur, unite: "jours",
-          etat: etatDepuisMarges(d.jours, requis.valeur, requis.valeur * 0.25),
+          etat: etatDepuisMarges(d.jours, requis.valeur, requis.valeur * HEURISTIQUES_MOTEUR.margeChaleurRelative),
           source: requis };
       } else {
         // Exigence documentée, mais aucune source ne la quantifie : on le dit,
@@ -577,18 +597,16 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
     };
   }
 
-  // --- retour de jardinier : couche de connaissance locale, distincte des
-  // données agronomiques. Elle ne devient jamais un chiffre.
-  const retourProche = Array.isArray(retours) && retours.length ? retours[0] : null;
-  if (retourProche) {
-    const positif = retourProche.resultat !== "echec";
-    dimensions.retourLocal = {
-      etat: positif ? CONFORTABLE : HORS,
-      positif, resultat: retourProche.resultat,
-      distance: retourProche.distance, lieu: retourProche.lieu?.nom,
-      nombre: retours.length, bloquant: false, temoignage: true, axe: "observation",
-      source: { valeur: 1, source: retourProche.source, url: retourProche.url || null,
-        annee: retourProche.annee, confiance: retourProche.confiance, note: retourProche.note },
+  // --- preuves locales : couche de connaissance distincte des données
+  // agronomiques. Une preuve est une donnée ; ce qu'on en conclut vient de la
+  // SYNTHÈSE de l'ensemble, jamais d'une anecdote isolée.
+  const synthese = synthesePreuves(retours);
+  if (synthese.total) {
+    dimensions.preuvesLocales = {
+      etat: synthese.demontrePositif ? CONFORTABLE
+        : synthese.demontreNegatif ? HORS : INCONNU,
+      quantifiable: synthese.conclut,
+      ...synthese, bloquant: false, temoignage: true, axe: "observation",
     };
   }
 
@@ -619,25 +637,22 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   }
 
   /* ----- axe 2 : statut local. Il exige des éléments POSITIFS ----- */
-  const retour = dimensions.retourLocal;
-  const reussiteRepetee = retour?.positif
-    && (retour.resultat === "recolteReguliere" || retour.nombre >= 3);
-  const echecLocal = retour && !retour.positif;
-
   const quantifiees = agronomiques.filter(d => d.bloquant && d.etat !== INCONNU);
   const toutesConfortables = quantifiees.length >= 2 && quantifiees.every(d => d.etat === CONFORTABLE);
   const auMoinsUneLimite = quantifiees.some(d => d.etat === LIMITE);
   const inconnuesRestantes = agronomiques.some(d => d.etat === INCONNU);
 
   let statutLocal = "indetermine";
-  if (compatibilite === "incompatible") {
+  if (compatibilite === "incompatible" || synthese.contradictoire) {
+    // Des preuves qui se contredisent ne produisent pas une conclusion moyenne :
+    // elles produisent une absence de conclusion, et on le dit.
     statutLocal = "indetermine";
-  } else if (echecLocal) {
-    statutLocal = "experimental";          // quelqu'un a essayé et échoué ici
-  } else if (reussiteRepetee) {
-    statutLocal = "eprouve";               // réussite démontrée sur place
+  } else if (synthese.demontrePositif) {
+    statutLocal = "eprouve";               // réussite établie par un faisceau de preuves
+  } else if (synthese.demontreNegatif) {
+    statutLocal = "experimental";          // échecs répétés ou source sérieuse le disant
   } else if (auMoinsUneLimite && compatibilite !== "indeterminee") {
-    statutLocal = "experimental";          // marginal mais plausible : mesuré, pas supposé
+    statutLocal = "experimental";          // marginal mais mesuré, pas supposé
   } else if (toutesConfortables && !inconnuesRestantes) {
     statutLocal = "eprouve";               // toutes les exigences connues, toutes tenues
   }
@@ -646,16 +661,64 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   let confiance = "faible";
   if (agronomiques.length >= 3 && !inconnuesRestantes) confiance = "haute";
   else if (agronomiques.length >= 2) confiance = "moyenne";
-  if (retour?.positif && confiance === "faible") confiance = "moyenne";
+  if (synthese.positives && confiance === "faible") confiance = "moyenne";
 
   // Le modèle dit non, quelqu'un la cultive pourtant : on l'affiche, on ne
   // l'efface pas. Ce sont nos seuils qu'il faut suspecter.
-  const contradiction = compatibilite === "incompatible" && retour?.positif === true;
+  const contradiction = compatibilite === "incompatible" && synthese.positives > 0;
 
   return {
     compatibilite, statutLocal, confiance,
     faisabiliteCycleAnnuel, survieVivaceAuFroid, gardeeEnPlace,
     dimensions, dimensionsDocumentees: agronomiques.length, contradiction,
+  };
+}
+
+/**
+ * Synthèse d'un faisceau de preuves locales.
+ *
+ * Une preuve forte (institut technique, essai variétal, université, service
+ * agricole, littérature agronomique locale, historique horticole documenté)
+ * repose déjà sur une répétition : elle peut conclure seule. Une observation de
+ * jardinier ne vaut que par le nombre et la concordance. Des preuves qui se
+ * contredisent ne concluent pas — on ne fabrique pas une moyenne.
+ */
+export function synthesePreuves(preuves) {
+  const liste = Array.isArray(preuves) ? preuves.filter(Boolean) : [];
+  const vide = { total: 0, positives: 0, negatives: 0, fortes: 0,
+    demontrePositif: false, demontreNegatif: false, contradictoire: false,
+    conclut: false, exemples: [] };
+  if (!liste.length) return vide;
+
+  const positive = (p) => p.resultat && p.resultat !== "echec";
+  const positives = liste.filter(positive);
+  const negatives = liste.filter(p => p.resultat === "echec");
+  const fortePositive = positives.find(p => p.fort);
+  const forteNegative = negatives.find(p => p.fort);
+
+  const seuil = HEURISTIQUES_MOTEUR.observationsPourConclure;
+  const part = HEURISTIQUES_MOTEUR.partPourConcordance;
+  const concordantes = (sous) => sous.length >= seuil && sous.length >= liste.length * part;
+
+  // Contradiction : deux camps sérieux, ou des observations partagées.
+  const contradictoire = (!!fortePositive && !!forteNegative)
+    || (positives.length > 0 && negatives.length > 0
+        && !concordantes(positives) && !concordantes(negatives));
+
+  const demontrePositif = !contradictoire && (!!fortePositive || concordantes(positives));
+  const demontreNegatif = !contradictoire && !demontrePositif
+    && (!!forteNegative || concordantes(negatives));
+
+  return {
+    total: liste.length, positives: positives.length, negatives: negatives.length,
+    fortes: liste.filter(p => p.fort).length,
+    demontrePositif, demontreNegatif, contradictoire,
+    conclut: demontrePositif || demontreNegatif,
+    exemples: liste.slice(0, 3).map(p => ({
+      type: p.type, resultat: p.resultat, source: p.source, date: p.date,
+      lieu: p.lieu?.nom, distance: p.distance, environnement: p.environnement,
+      fort: !!p.fort, confiance: p.confiance, note: p.note, url: p.url || null,
+    })),
   };
 }
 
