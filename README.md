@@ -267,7 +267,10 @@ qu'après l'achat de la licence.
 ### Autres
 
 - Logo « P » : `sources/logo-permavore.png` (création commandée par JBR).
-- Photo d'aperçu : `sources/photo-pousse-og.jpg`.
+- Photo d'aperçu : photo **Pixabay** (licence de contenu Pixabay). Seule l'œuvre dérivée
+  `og-image.jpg` (recadrée, décor recomposé) est publiée. L'**original n'est pas versionné** :
+  la licence interdit de le diffuser tel quel (« Standalone »). Il est conservé hors du projet,
+  dans `~/Pictures/Permavore/`. Ne pas le remettre dans `sources/`, publié à chaque déploiement.
 - Identification des plantes : Pl@ntNet (attribution affichée).
 
 ## À enrichir
