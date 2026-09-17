@@ -84,10 +84,17 @@ export async function chargerClimat(lat, lng) {
 const profil = () => etat.donnees?.profilClimatiqueLieu || null;
 const projection = () => etat.donnees?.projectionClimatiqueLieu || null;
 
+/** Retours de jardiniers autour du point courant, pour cette culture. */
+function retoursLocaux(cultureId) {
+  const l = etat.donnees?.lieu;
+  if (!l || !window.RetoursLocaux) return [];
+  return window.RetoursLocaux.retoursPour(cultureId, l.latitude, l.longitude);
+}
+
 /** Compatibilité actuelle d'une culture — null si le lieu n'est pas connu. */
-function compatibilite(culture) {
+function compatibilite(culture, cultureId) {
   const p = profil();
-  return (p && culture) ? compatibiliteActuelle(culture, p) : null;
+  return (p && culture) ? compatibiliteActuelle(culture, p, retoursLocaux(cultureId)) : null;
 }
 
 /** Tendance à +5 ans — « indisponible » tant que tout n'est pas réuni. */
@@ -100,7 +107,7 @@ function tendanceCulture(culture) {
 window.Climat = {
   charger: chargerClimat,
   profil, projection,
-  compatibilite, tendance: tendanceCulture,
+  compatibilite, tendance: tendanceCulture, retoursLocaux,
   climat: () => etat.donnees?.climat || null,
   zoneInterne: () => etat.donnees?.zoneInterne || null,
   tracabilite: () => etat.donnees?.tracabilite || null,

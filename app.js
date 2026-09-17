@@ -2655,6 +2655,7 @@ const LIBELLE_DIMENSION = {
   cycle: "agro.dim.cycle", chaleurCumulee: "agro.dim.chaleurCumulee",
   rusticite: "agro.dim.rusticite", froidHivernal: "agro.dim.froidHivernal",
   stressThermique: "agro.dim.stressThermique", eau: "agro.dim.eau",
+  besoinChaleur: "agro.dim.besoinChaleur", retourLocal: "agro.dim.retourLocal",
 };
 
 /** Détail « Pourquoi ? » : une ligne par dimension réellement documentée. */
@@ -2666,6 +2667,15 @@ function detailCompatibiliteHTML(compat, tend) {
     const chez = Number.isFinite(d.lieu)
       ? t("agro.chezToi", { valeur: nombreFR(d.lieu), unite: echapperHTML(d.unite || "") })
       : "";
+    if (d.temoignage) {
+      return `<li class="agro-dim agro-${d.etat} agro-temoignage">
+        <span class="agro-nom">${t("agro.dim.retourLocal")}</span>
+        <span class="agro-valeurs">${t("agro.retour." + d.resultat)} — ${t("agro.retour.lieu", {
+          lieu: echapperHTML(d.lieu || ""), distance: d.distance })}</span>
+        <em class="agro-reserve">${echapperHTML(d.source?.source || "")}${
+          d.source?.annee ? ", " + d.source.annee : ""}. ${t("agro.retour.nature")}</em>
+      </li>`;
+    }
     const effet = (tend?.effets || []).find(e => e.dimension === cle);
     const fleche = effet ? ` <span class="agro-fleche agro-${effet.sens}">${t("agro.effet." + effet.sens)}</span>` : "";
     return `<li class="agro-dim agro-${d.etat}">
@@ -2695,6 +2705,7 @@ function detailCompatibiliteHTML(compat, tend) {
   })}</p>` : "";
 
   return `<details class="agro-detail"><summary>${t("agro.pourquoi")}</summary>
+    ${compat.contradiction ? `<p class="agro-contradiction">${t("agro.contradiction")}</p>` : ""}
     <ul class="agro-dims">${lignes}</ul>
     ${sources ? `<p class="agro-sources">${t("agro.sources")} ${sources}</p>` : ""}
     ${traceHTML}</details>`;
@@ -2718,7 +2729,7 @@ function tendanceHTML(plante) {
   }
   if (statut !== "pret") return `<span class="proj-absente">${t("agro.tendance.indisponible")} — ${t("agro.raison.source")}</span>`;
 
-  const compat = window.Climat.compatibilite(profil);
+  const compat = window.Climat.compatibilite(profil, plante.id);
   const tend = window.Climat.tendance(profil);
   const sens = tend.sens;
   const phrase = sens === "indisponible"
@@ -2736,7 +2747,7 @@ function tendanceHTML(plante) {
 function statutAgroHTML(plante) {
   const profil = profilCulture(plante);
   if (profil && climatPret() && window.Climat.statut() === "pret") {
-    const compat = window.Climat.compatibilite(profil);
+    const compat = window.Climat.compatibilite(profil, plante.id);
     if (compat && compat.statut !== "nonEvalue") {
       const emoji = { eprouve: "🏡", experimental: "🧪", incompatible: "🚫" }[compat.statut] || "•";
       return `${emoji} ${t("agro.statut." + compat.statut)}`;

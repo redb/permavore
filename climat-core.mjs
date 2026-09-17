@@ -430,7 +430,7 @@ const etatDepuisMarges = (valeurLieu, requis, margeConfort) => {
  * Compatibilité d'une culture avec un lieu, dimension par dimension.
  * `profilLieu` : sortie de profilClimatique(). `culture` : profil agronomique.
  */
-export function compatibiliteActuelle(culture, profilLieu) {
+export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   const dimensions = {};
   if (!culture || !profilLieu) return { statut: "nonEvalue", dimensions };
 
@@ -533,19 +533,48 @@ export function compatibiliteActuelle(culture, profilLieu) {
     };
   }
 
+  // --- retour de jardinier : l'observation sur place l'emporte sur le modèle
+  // pour CE lieu. Elle ne devient jamais un chiffre agronomique ; elle répond
+  // seulement à la question que les seuils manquants laissaient ouverte.
+  const retourProche = Array.isArray(retours) && retours.length ? retours[0] : null;
+  if (retourProche) {
+    const positif = retourProche.resultat !== "echec";
+    dimensions.retourLocal = {
+      etat: positif ? "favorable" : "defavorable",
+      positif, resultat: retourProche.resultat,
+      distance: retourProche.distance, lieu: retourProche.lieu?.nom,
+      bloquant: false, temoignage: true,
+      source: { valeur: 1, source: retourProche.source, url: null,
+        annee: retourProche.annee, confiance: retourProche.confiance,
+        note: retourProche.note },
+    };
+  }
+
   const liste = Object.values(dimensions);
   const documentees = liste.length;
   let statut = "nonEvalue";
+  let contradiction = false;
   if (documentees >= 2) {
-    if (liste.some(d => d.bloquant && d.etat === "defavorable")) statut = "incompatible";
-    else if (liste.some(d => d.etat === "limite" || d.etat === "defavorable")) statut = "experimental";
-    // Une exigence documentée mais non évaluable interdit « éprouvé » : on ne
-    // peut pas déclarer une culture sûre sur les seules dimensions mesurables.
-    else if (liste.some(d => d.etat === "inconnu")) statut = "experimental";
-    else statut = "eprouve";
+    const modeleBloque = liste.some(d => d.bloquant && d.etat === "defavorable");
+    const positif = dimensions.retourLocal?.positif === true;
+    if (modeleBloque) {
+      statut = "incompatible";
+      // Quelqu'un la cultive pourtant sur place : ce n'est pas au témoignage de
+      // céder en silence, c'est à nos seuils d'être signalés comme suspects.
+      if (positif) contradiction = true;
+    } else if (liste.some(d => d.etat === "limite"
+        || (d.etat === "defavorable" && !d.bloquant))) {
+      statut = "experimental";
+    } else if (liste.some(d => d.etat === "inconnu")) {
+      // Une exigence documentée mais non mesurable interdit « éprouvé »…
+      // sauf si un jardinier du coin a déjà répondu à la question en la cultivant.
+      statut = positif ? "eprouve" : "experimental";
+    } else {
+      statut = "eprouve";
+    }
   }
 
-  return { statut, dimensions, dimensionsDocumentees: documentees };
+  return { statut, dimensions, dimensionsDocumentees: documentees, contradiction };
 }
 
 /* ---------- tendance à +5 ans ------------------------------------------- */

@@ -186,3 +186,45 @@ test("une exigence documentée mais non mesurable interdit le classement « épr
   assert.equal(r.dimensions.besoinChaleur.nonEvaluable, true);
   assert.equal(r.dimensions.cycle.etat, "favorable", "le gel n'est pas le facteur limitant");
 });
+
+test("le retour d'un jardinier du coin tranche ce que les seuils laissent ouvert", () => {
+  // Patate douce en climat tempéré : la chaleur nécessaire est documentée mais
+  // non mesurable, donc « expérimental ». Un jardinier qui la cultive à 3 km
+  // répond précisément à cette question : la culture devient « éprouvée » ICI.
+  const tempere = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+  const culture = {
+    cycle: { joursMaturite: source(120, "jours") },
+    chaleur: { seuilMinCroissance: source(25, "°C") },
+    eau: { sensibiliteDeficit: source(1, "1-3") },
+  };
+  assert.equal(compatibiliteActuelle(culture, tempere).statut, "experimental");
+
+  const retour = [{ resultat: "pousse", distance: 3, annee: 2026,
+    lieu: { nom: "Rumilly" }, source: "un jardinier", confiance: "haute" }];
+  const avec = compatibiliteActuelle(culture, tempere, retour);
+  assert.equal(avec.statut, "eprouve");
+  assert.equal(avec.dimensions.retourLocal.positif, true);
+  assert.equal(avec.contradiction, false);
+});
+
+test("un retour positif ne masque pas un seuil bloquant : il le met en doute", () => {
+  const froid = profilClimatique(serie({ tmoy: 3, amplitude: 12 }), 60);
+  const culture = {
+    cycle: { joursMaturite: source(200, "jours"), degresJours10Min: source(2000, "dj") },
+  };
+  const retour = [{ resultat: "recolte", distance: 5, annee: 2026,
+    lieu: { nom: "quelque part" }, source: "un jardinier", confiance: "haute" }];
+  const r = compatibiliteActuelle(culture, froid, retour);
+  assert.equal(r.statut, "incompatible", "le seuil bloquant reste affiché");
+  assert.equal(r.contradiction, true, "mais la contradiction est signalée");
+});
+
+test("un échec rapporté sur place empêche le classement « éprouvé »", () => {
+  const doux = profilClimatique(serie({ tmoy: 16, amplitude: 8 }), 40);
+  const culture = { cycle: { joursMaturite: source(120, "jours"),
+                             degresJours10Min: source(1200, "dj") } };
+  assert.equal(compatibiliteActuelle(culture, doux).statut, "eprouve");
+  const echec = [{ resultat: "echec", distance: 2, annee: 2026,
+    lieu: { nom: "ici" }, source: "un jardinier", confiance: "haute" }];
+  assert.equal(compatibiliteActuelle(culture, doux, echec).statut, "experimental");
+});
