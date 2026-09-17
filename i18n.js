@@ -285,8 +285,7 @@ const I18N = {
   "footer.marque": { fr: "<strong>Permavore</strong> — sélecteur de cultures pour jardin nourricier.", en: "<strong>Permavore</strong> — crop picker for a home food garden." },
   "footer.note": { fr: "Calendrier indicatif (France métropolitaine), à adapter à la météo réelle et à ton microclimat.",
     en: "Indicative calendar (mainland France), to be adjusted to actual weather and your microclimate." },
-  "footer.credit": { fr: "Police du nom « Permavore » : Graham par <a href=\"https://www.zetafonts.com\" target=\"_blank\" rel=\"noopener\">Zetafonts</a>.",
-                    en: "Font used for the “Permavore” name: Graham by <a href=\"https://www.zetafonts.com\" target=\"_blank\" rel=\"noopener\">Zetafonts</a>." },
+  "footer.credit": { fr: "Police du nom « Permavore » : Graham par <a href=\"https://www.zetafonts.com\" target=\"_blank\" rel=\"noopener\">Zetafonts</a>. Photo d'accueil : <a href=\"https://pixabay.com/fr/photos/pousse-plante-sol-germination-10339344/\" target=\"_blank\" rel=\"noopener\">Pixabay</a>.", en: "Font used for the “Permavore” name: Graham by <a href=\"https://www.zetafonts.com\" target=\"_blank\" rel=\"noopener\">Zetafonts</a>. Home photo: <a href=\"https://pixabay.com/fr/photos/pousse-plante-sol-germination-10339344/\" target=\"_blank\" rel=\"noopener\">Pixabay</a>." },
 
   // Filtres catégories/cycle
   "filtre.tout": { fr: "Tout", en: "All" },

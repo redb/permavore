@@ -820,3 +820,16 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
   .outils .recherche { min-width: 0; }
 }
 .cm-actions .cm-pourquoi { white-space: nowrap; }
+
+/* ---------- Écran d'accueil : photo de pousse en fond ----------
+   Voile vert par-dessus la photo : l'identité reste verte et le texte blanc
+   garde son contraste, quel que soit le cadrage (mobile compris). */
+.hero {
+  background-image:
+    linear-gradient(180deg, rgba(20,60,32,.62) 0%, rgba(24,74,40,.70) 45%, rgba(31,83,48,.92) 100%),
+    url("/hero-pousse.jpg");
+  background-size: cover, cover;
+  background-position: center 42%, center 42%;
+  background-repeat: no-repeat;
+}
+.hero h1, .hero p { text-shadow: 0 2px 10px rgba(0,0,0,.35); }
