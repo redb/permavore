@@ -1,10 +1,13 @@
 /* =========================================================================
    Permavore — logique applicative
+   Internationalisation : `t(cle, vars)`, `bi()`, `txt()` et `LANG` sont
+   définis dans i18n.js (chargé avant ce fichier). Les champs éditoriaux de
+   data.js (nom de plante, libellés, etc.) sont des objets bilingues qui se
+   comportent comme des chaînes dès qu'on les affiche (voir data.js).
    ========================================================================= */
 
-const MOIS = ["janvier","février","mars","avril","mai","juin","juillet",
-              "août","septembre","octobre","novembre","décembre"];
-const moisNom = m => MOIS[((m - 1) % 12 + 12) % 12];
+function MOIS_ACTIFS() { return getLang() === "en" ? MOIS_EN : MOIS_FR; }
+const moisNom = m => MOIS_ACTIFS()[((m - 1) % 12 + 12) % 12];
 
 // État
 const state = {
@@ -51,12 +54,12 @@ function sauverRessources() {
 // Quand cette ressource resservira-t-elle ? (« maintenant » ou prochain mois utile)
 function prochaineUtilisation(r) {
   const mois = dateDuJour().getMonth() + 1;
-  if (r.mois.includes(mois)) return { maintenant: true, texte: "c'est le moment" };
+  if (r.mois.includes(mois)) return { maintenant: true, texte: t("ressources.maintenant") };
   for (let i = 1; i <= 12; i++) {
     const m = ((mois - 1 + i) % 12) + 1;
     if (r.mois.includes(m)) {
       return { maintenant: false,
-        texte: i === 1 ? `dès ${moisNom(m)} (le mois prochain)` : `à partir de ${moisNom(m)}` };
+        texte: i === 1 ? t("ressources.desmois", { mois: moisNom(m) }) : t("ressources.apartirde", { mois: moisNom(m) }) };
     }
   }
   return { maintenant: false, texte: "—" };
@@ -112,10 +115,11 @@ function dateDepuisISO(iso) {
   const [a, m, j] = iso.split("-").map(Number);
   return new Date(a, m - 1, j);
 }
+function localeCourante() { return getLang() === "en" ? "en-US" : "fr-FR"; }
 function fmtDateCourte(date) {
   const options = { day: "numeric", month: "long" };
   if (date.getFullYear() !== dateDuJour().getFullYear()) options.year = "numeric";
-  return date.toLocaleDateString("fr-FR", options);
+  return date.toLocaleDateString(localeCourante(), options);
 }
 
 // ---------- Étapes de culture (prévision proactive) ----------
@@ -123,8 +127,16 @@ function fmtDateCourte(date) {
 // entretien (éclaircir, pailler) et début de récolte.
 // Récolte : « N à M semaines » dans la fiche → délai en jours ;
 // sinon un nom de mois (« Juillet → octobre ») → prochaine occurrence de ce mois.
+// Remarque : la reconnaissance du texte de récolte se fait toujours sur le
+// texte FRANÇAIS de référence (`plante.recolte.fr` si bilingue), car c'est le
+// format structuré ("N semaines", noms de mois) qui sert de source de vérité
+// au moteur de calcul — la traduction anglaise n'est utilisée qu'à l'affichage.
+function texteRecolteRef(plante) {
+  const r = plante.recolte;
+  return typeof r === "object" && r && "fr" in r ? r.fr : String(r || "");
+}
 function delaiRecolteJours(plante) {
-  const texte = normaliseVille(plante.recolte);
+  const texte = normaliseVille(texteRecolteRef(plante));
   const m = texte.match(/(\d+)\s*(?:a\s*(\d+)\s*)?semaines/);
   if (m) {
     const s1 = Number(m[1]), s2 = m[2] ? Number(m[2]) : s1;
@@ -133,26 +145,23 @@ function delaiRecolteJours(plante) {
   return null;
 }
 function moisRecolte(plante) {
-  const texte = normaliseVille(plante.recolte);
-  const index = MOIS.findIndex(mois => texte.startsWith(normaliseVille(mois)));
+  const texte = normaliseVille(texteRecolteRef(plante));
+  const index = MOIS_FR.findIndex(mois => texte.startsWith(normaliseVille(mois)));
   return index >= 0 ? index + 1 : null;
 }
 // Mois de FIN de récolte (« Juillet → octobre » → 10), sinon null.
 function moisFinRecolte(plante) {
-  const texte = normaliseVille(plante.recolte);
+  const texte = normaliseVille(texteRecolteRef(plante));
   const morceaux = texte.split(/→|->|a fin|jusqu'a/);
   if (morceaux.length < 2) return null;
   const fin = morceaux[morceaux.length - 1].trim();
-  const index = MOIS.findIndex(mois => fin.startsWith(normaliseVille(mois)));
+  const index = MOIS_FR.findIndex(mois => fin.startsWith(normaliseVille(mois)));
   return index >= 0 ? index + 1 : null;
 }
-const LIBELLE_MODE = {
-  semis: "Semis",
-  plant: "Plantation du plant",
-  tubercule: "Plantation des tubercules",
-  caieu: "Plantation des caïeux",
-  rhizome: "Plantation du rhizome",
-};
+const CLE_MODE = ["semis", "plant", "tubercule", "caieu", "rhizome"];
+function libelleMode(mode) {
+  return t("mode." + (CLE_MODE.includes(mode) ? mode : "semis"));
+}
 
 function etapesCulture(plante, iso) {
   const debut = dateDepuisISO(iso);
@@ -161,9 +170,9 @@ function etapesCulture(plante, iso) {
     d.setDate(d.getDate() + jours);
     return d;
   };
-  const mode = LIBELLE_MODE[plante.mode] ? plante.mode : "semis";
+  const mode = CLE_MODE.includes(plante.mode) ? plante.mode : "semis";
   const etapes = [
-    { cle: "semis", emoji: "🌱", label: LIBELLE_MODE[mode], date: debut },
+    { cle: "semis", emoji: "🌱", label: libelleMode(mode), date: debut },
   ];
 
   // Levée : uniquement pour les plantes réellement semées, et uniquement si la
@@ -173,21 +182,21 @@ function etapesCulture(plante, iso) {
     const [min, max] = plante.levee;
     etapes.push({
       cle: "levee", emoji: "🌿",
-      label: min === max ? `Levée attendue (~${min} jours)`
-        : `Levée attendue (${min} à ${max} jours)`,
+      label: min === max ? t("etape.leveeattendue", { n: min })
+        : t("etape.leveeattendue.range", { min, max }),
       date: plus(min), dateFin: plus(max),
     });
     // Éclaircissage : seulement pour les plantes qui se démarient réellement.
     // Les légumineuses (haricot, pois, fève) se sèment à l'écartement définitif.
     if (plante.eclaircir === true) {
       etapes.push({ cle: "eclaircir", emoji: "🧑‍🌾",
-        label: `Éclaircir à ${plante.espacement}`, date: plus(max + 10) });
+        label: t("etape.eclaircir", { espacement: txt(plante.espacement) }), date: plus(max + 10) });
     }
   }
 
   const delai = delaiRecolteJours(plante);
   if (delai) {
-    etapes.push({ cle: "recolte", emoji: "🧺", label: "Début de récolte (estimation)", date: plus(delai) });
+    etapes.push({ cle: "recolte", emoji: "🧺", label: t("etape.debutrecolte"), date: plus(delai) });
   } else {
     const mois = moisRecolte(plante);
     if (mois) {
@@ -199,14 +208,14 @@ function etapesCulture(plante, iso) {
         // plus rien d'utile ici. On l'annonce plutôt que d'inventer une date.
         etapes.push({
           cle: "recolte", emoji: "🧺", sansDate: true,
-          label: `Mise en place hors calendrier — récolte de référence ${moisNom(mois)} → ${moisNom(fin)}`,
+          label: t("etape.horscalendrier", { debut: moisNom(mois), fin: moisNom(fin) }),
           date: debut,
         });
       } else {
         // Sinon : prochaine ouverture de la fenêtre.
         const annee = moisMiseEnPlace <= mois ? debut.getFullYear() : debut.getFullYear() + 1;
         etapes.push({ cle: "recolte", emoji: "🧺",
-          label: "Début de récolte (estimation)", date: new Date(annee, mois - 1, 1) });
+          label: t("etape.debutrecolte"), date: new Date(annee, mois - 1, 1) });
       }
     }
   }
@@ -237,7 +246,7 @@ function prochainesEtapes(horizonJours = 90) {
           const finRecolte = new Date(anneeFin, fin, 0); // dernier jour du mois de fin
           if (finRecolte >= aujourdhui) {
             liste.push({ plante, cle: "recolte", emoji: "🧺",
-              label: `Récolte en cours (jusqu'à fin ${moisNom(fin)})`, date: aujourdhui });
+              label: t("etape.recoltecours", { mois: moisNom(fin) }), date: aujourdhui });
           }
         }
       }
@@ -271,9 +280,8 @@ function previsionSemences(plante, iso) {
     const annee = debut.getFullYear() + 1;
     return {
       date: new Date(annee, 5, 1),                 // juin de l'année suivante
-      label: `Montée en graines vers l'été ${annee}`,
-      note: "Bisannuelle : elle ne fait pas de graines la première année. "
-        + "Les pieds porte-graines doivent passer l'hiver en place.",
+      label: t("semences.bisannuelle", { annee }),
+      note: t("semences.bisannuelle.note"),
     };
   }
   const fin = moisFinRecolte(plante) || moisRecolte(plante);
@@ -281,9 +289,8 @@ function previsionSemences(plante, iso) {
   const annee = fin >= debut.getMonth() + 1 ? debut.getFullYear() : debut.getFullYear() + 1;
   return {
     date: new Date(annee, fin - 1, 15),
-    label: `Graines récoltables vers ${moisNom(fin)} ${annee}`,
-    note: "Laisser les fruits porte-graines mûrir au-delà du stade de consommation, "
-      + "sur des pieds sains et conformes.",
+    label: t("semences.graines", { mois: moisNom(fin), annee }),
+    note: t("semences.note"),
   };
 }
 
@@ -390,7 +397,7 @@ function majMonPotager() {
   if (!b) return;
   const n = state.adoptees.size;
   b.hidden = n === 0 && !state.filtrePotager;
-  b.textContent = `🌱 Mon potager (${n})`;
+  b.textContent = t("mon.potager", { n });
   b.classList.toggle("actif", state.filtrePotager);
 }
 
@@ -423,33 +430,33 @@ function urlExterneSure(valeur) {
 function validerPlantePerso(brut) {
   const erreurs = [];
   if (!brut || typeof brut !== "object" || Array.isArray(brut)) {
-    return { valide: false, erreurs: ["La fiche n'est pas un objet."] };
+    return { valide: false, erreurs: [t("valid.pasunobjet")] };
   }
 
   const texte = (champ, fallback, max, requis = false) => {
     if (typeof brut[champ] !== "string") {
-      if (requis) erreurs.push(`${champ} doit être un texte.`);
+      if (requis) erreurs.push(t("valid.doittexte", { champ }));
       return fallback;
     }
     const valeur = brut[champ].trim();
-    if (requis && !valeur) erreurs.push(`${champ} est requis.`);
-    if (valeur.length > max) erreurs.push(`${champ} dépasse ${max} caractères.`);
+    if (requis && !valeur) erreurs.push(t("valid.requis", { champ }));
+    if (valeur.length > max) erreurs.push(t("valid.tropong", { champ, max }));
     return valeur || fallback;
   };
   const choix = (champ, valeurs) => {
     const valeur = brut[champ];
-    if (!Object.hasOwn(valeurs, valeur)) erreurs.push(`${champ} est invalide.`);
+    if (!Object.hasOwn(valeurs, valeur)) erreurs.push(t("valid.invalide", { champ }));
     return valeur;
   };
 
   const id = texte("id", "", 120, true);
-  if (id && !/^[a-z0-9-]+$/.test(id)) erreurs.push("id contient des caractères invalides.");
+  if (id && !/^[a-z0-9-]+$/.test(id)) erreurs.push(t("valid.idinvalide"));
   const nom = texte("nom", "", 80, true);
   const latin = texte("latin", "—", 120);
   const emoji = texte("emoji", "🌱", 16);
   const espacement = texte("espacement", "—", 80);
   const recolte = texte("recolte", "—", 160);
-  const court = texte("court", "Plante ajoutée par toi.", 300);
+  const court = texte("court", t("plante.ajouteeparToi"), 300);
   const long = texte("long", court, 3000);
   const cat = choix("cat", CATEGORIES);
   const cycle = choix("cycle", CYCLES);
@@ -458,29 +465,29 @@ function validerPlantePerso(brut) {
 
   const diff = Number(brut.diff);
   if (!Number.isInteger(diff) || !Object.hasOwn(DIFFICULTES, diff)) {
-    erreurs.push("diff est invalide.");
+    erreurs.push(t("valid.invalide", { champ: "diff" }));
   }
   const densite = Number(brut.densite);
   if (!Number.isFinite(densite) || densite <= 0 || densite > 1000) {
-    erreurs.push("densite doit être comprise entre 0 et 1000.");
+    erreurs.push(t("valid.densite"));
   }
 
   const semisValide = Array.isArray(brut.semis) && brut.semis.length >= 1
     && brut.semis.length <= 4 && brut.semis.every(fenetre =>
       Array.isArray(fenetre) && fenetre.length === 2
       && fenetre.every(mois => Number.isInteger(mois) && mois >= 1 && mois <= 12));
-  if (!semisValide) erreurs.push("semis doit contenir de 1 à 4 périodes valides.");
+  if (!semisValide) erreurs.push(t("valid.semis"));
 
   const conseilsValides = Array.isArray(brut.conseils) && brut.conseils.length <= 20
     && brut.conseils.every(conseil => typeof conseil === "string"
       && conseil.trim().length <= 300);
-  if (!conseilsValides) erreurs.push("conseils est invalide.");
+  if (!conseilsValides) erreurs.push(t("valid.invalide", { champ: "conseils" }));
 
   const photoBrute = texte("photo", "", 2000);
-  if (photoBrute && !estImageValide(photoBrute)) erreurs.push("photo doit être une URL d'image HTTP(S).");
+  if (photoBrute && !estImageValide(photoBrute)) erreurs.push(t("valid.photourl"));
   const lienBrut = texte("lien", "", 2000);
   const lien = urlExterneSure(lienBrut);
-  if (lienBrut && !lien) erreurs.push("lien doit être une URL HTTP(S).");
+  if (lienBrut && !lien) erreurs.push(t("valid.lienurl"));
 
   if (erreurs.length) return { valide: false, erreurs };
   return {
@@ -622,16 +629,21 @@ function nbPieds(plante, surfaceDediee) {
 // Densité lisible. Un demi-pied de figuier n'existe pas : sous 1 pied/m² on
 // inverse le rapport et on annonce la surface qu'il faut par pied.
 function nombreFR(n) {
-  return Number(n).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  return Number(n).toLocaleString(localeCourante(), { maximumFractionDigits: 1 });
 }
-function textePieds(n) {
-  return `${nombreFR(n)} pied${n >= 2 ? "s" : ""}`;
+// Texte "N pied(s)" / "N plant(s)", utilisé dans la fiche plante et les cartes.
+function texteNombrePieds(n) {
+  const unite = getLang() === "en" ? (n >= 2 ? "plants" : "plant") : (n >= 2 ? "pieds" : "pied");
+  return `${nombreFR(n)} ${unite}`;
 }
 function texteDensite(plante) {
   const d = plante.densite;
-  if (d >= 1) return `${nombreFR(d)} pied${d >= 2 ? "s" : ""}/m²`;
+  const unitePieds = getLang() === "en" ? (d >= 2 ? "plants" : "plant") : (d >= 2 ? "pieds" : "pied");
+  if (d >= 1) return `${nombreFR(d)} ${unitePieds}/m²`;
   const m2 = Math.round(1 / d);
-  return `1 pied pour ${nombreFR(m2)} m²`;
+  return getLang() === "en"
+    ? `1 plant per ${nombreFR(m2)} m²`
+    : `1 pied pour ${nombreFR(m2)} m²`;
 }
 
 // Lien d'achat : 1) lien propre à la plante, 2) partenaire global, 3) recherche web
@@ -640,10 +652,11 @@ function lienAchat(plante) {
   if (lienPropre) return lienPropre;
   if (typeof PARTENAIRE_DEFAUT !== "undefined" && PARTENAIRE_DEFAUT.actif) {
     const lienPartenaire = urlExterneSure(
-      PARTENAIRE_DEFAUT.url.replace("{q}", encodeURIComponent(plante.nom)));
+      PARTENAIRE_DEFAUT.url.replace("{q}", encodeURIComponent(txt(plante.nom))));
     if (lienPartenaire) return lienPartenaire;
   }
-  const q = encodeURIComponent(`graines ${plante.nom} bio potager`);
+  const requete = getLang() === "en" ? `organic ${txt(plante.nom)} seeds vegetable garden` : `graines ${txt(plante.nom)} bio potager`;
+  const q = encodeURIComponent(requete);
   return `https://www.google.com/search?q=${q}`;
 }
 // Le lien est-il sponsorisé (badge "Partenaire ✦") ?
@@ -719,7 +732,7 @@ function renderAc(res) {
   ac.replaceChildren();
   if (!res.length) {
     const vide = el("div", "ac-vide");
-    vide.textContent = "Aucune commune trouvée";
+    vide.textContent = t("ac.aucune");
     ac.appendChild(vide);
     ac.hidden = false; return;
   }
@@ -795,12 +808,12 @@ async function affinerZoneParAltitude(lat, lng, zoneEstimee) {
   if (alt === null) return null;
   const altArrondie = Math.round(alt);
   if (alt >= ALTITUDE_MONTAGNE) {
-    return { zone: "montagne", note: `⛰️ ${altArrondie} m d'altitude` };
+    return { zone: "montagne", note: t("geo.altitudependant", { alt: altArrondie }) };
   }
   if (alt >= ALTITUDE_PIEMONT) {
-    return { zone: zoneEstimee, note: `⛰️ ${altArrondie} m — surveille les gelées tardives` };
+    return { zone: zoneEstimee, note: t("geo.altitudepiemont", { alt: altArrondie }) };
   }
-  return { zone: zoneEstimee, note: `${altArrondie} m d'altitude` };
+  return { zone: zoneEstimee, note: t("geo.altitude", { alt: altArrondie }) };
 }
 
 function zoneDepuisCoords(lat, lng) {
@@ -834,13 +847,14 @@ function carteHTML(plante) {
   const enc = ENCOMBREMENTS[plante.encombrement], sol = SOLEILS[plante.soleil];
   const statut = state._statut ? state._statut(plante) : "later";
   const photo = photoPlante(plante);
-  const ruban = statut === "now" ? `<span class="ruban-now">🌱 À planter</span>`
-    : statut === "soon" ? `<span class="ruban-soon">⏳ Bientôt</span>` : "";
+  const ruban = statut === "now" ? `<span class="ruban-now">${t("carte.aplanter")}</span>`
+    : statut === "soon" ? `<span class="ruban-soon">${t("carte.bientot")}</span>` : "";
   const imgTag = photo
     ? `<img src="${echapperHTML(photo)}" alt="${echapperHTML(plante.nom)}" loading="lazy" onerror="this.remove()" />` : "";
-  const spons = estSponsorise(plante) ? `<span class="spons">Partenaire ✦</span>` : "";
+  const spons = estSponsorise(plante) ? `<span class="spons">${t("carte.partenaire")}</span>` : "";
+  const nPieds = nbPieds(plante, surfaceDediee(plante, state.surface));
   const surf = state.surface
-    ? `<span>🪴 ≈ ${textePieds(nbPieds(plante, surfaceDediee(plante, state.surface)))} conseillé${nbPieds(plante, surfaceDediee(plante, state.surface)) >= 2 ? "s" : ""}</span>`
+    ? `<span>${t(nPieds >= 2 ? "carte.piedsconseilles.pl" : "carte.piedsconseilles", { n: texteNombrePieds(nPieds) })}</span>`
     : `<span>🪴 ${texteDensite(plante)}</span>`;
 
   return `
@@ -859,15 +873,15 @@ function carteHTML(plante) {
       <p class="latin">${echapperHTML(plante.latin)}</p>
       <p class="court">${echapperHTML(plante.court)}</p>
       <div class="meta">
-        <span>🌱 Semer / planter : <strong>${texteFenetre(plante, state.zone)}</strong></span>
-        <span>🧺 Récolte : ${echapperHTML(plante.recolte)}</span>
+        <span>${t("carte.semer")}<strong>${texteFenetre(plante, state.zone)}</strong></span>
+        <span>${t("carte.recolte")}${echapperHTML(plante.recolte)}</span>
         ${surf}
       </div>
       <div class="carte-foot">
         <a class="lien-achat" href="${echapperHTML(lienAchat(plante))}" target="_blank" rel="noopener"
-           onclick="event.stopPropagation()">🛒 Trouver ${spons}</a>
+           onclick="event.stopPropagation()">${t("carte.trouver")} ${spons}</a>
         <button class="adopt ${estAdoptee(plante.id) ? "on" : ""}" data-adopt="${echapperHTML(plante.id)}">
-          ${estAdoptee(plante.id) ? "✓ Planté" : "＋ Adopter"}</button>
+          ${estAdoptee(plante.id) ? t("carte.plante") : t("carte.adopter")}</button>
       </div>
     </div>`;
 }
@@ -877,10 +891,10 @@ function creerLigne(plante) {
   const c = CYCLES[plante.cycle], d = DIFFICULTES[plante.diff];
   const statut = state._statut(plante);
   const semis = statut === "now"
-    ? `<span class="lg-now">🌱 à planter maintenant</span>`
+    ? `<span class="lg-now">${t("ligne.aplanter")}</span>`
     : `🌱 ${texteFenetre(plante, state.zone)}`;
   const surf = state.surface
-    ? `🪴 ≈ ${nbPieds(plante, surfaceDediee(plante, state.surface))} pieds`
+    ? `🪴 ≈ ${texteNombrePieds(nbPieds(plante, surfaceDediee(plante, state.surface)))}`
     : `🪴 ${texteDensite(plante)}`;
   const on = estAdoptee(plante.id);
   const photo = photoPlante(plante);
@@ -920,7 +934,7 @@ function surfaceDediee(p, surface) {
   return Math.max(0.5, Math.min(base, plafond));
 }
 function fmtSurface(m2) {
-  return m2.toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  return m2.toLocaleString(localeCourante(), { maximumFractionDigits: 1 });
 }
 
 function creerCarte(plante) {
@@ -947,19 +961,19 @@ function ouvrirModale(plante) {
   const enc = ENCOMBREMENTS[plante.encombrement], sol = SOLEILS[plante.soleil];
   const statut = state._statut(plante);
   const photo = photoPlante(plante);
-  const badge = statut === "now" ? `<span class="cal-badge">à planter maintenant</span>` : "";
+  const badge = statut === "now" ? `<span class="cal-badge">${t("modale.aplanter")}</span>` : "";
   const imgTag = photo
     ? `<img src="${echapperHTML(photo)}" alt="${echapperHTML(plante.nom)}" onerror="this.remove()" />` : "";
 
   let calc;
   if (state.surface) {
     const dediee = surfaceDediee(plante, state.surface);
-    calc = `<p class="calc-res">Pour ton jardin de <strong>${state.surface} m²</strong>, en lui consacrant
-      ~${fmtSurface(dediee)} m² (une portion raisonnable), tu peux viser
-      <strong>${textePieds(nbPieds(plante, dediee))}</strong> — ${texteDensite(plante)}.</p>`;
+    calc = `<p class="calc-res">${t("modale.calc.avecsurface", {
+      surface: state.surface, dediee: fmtSurface(dediee),
+      pieds: texteNombrePieds(nbPieds(plante, dediee)), densite: texteDensite(plante),
+    })}</p>`;
   } else {
-    calc = `<p class="calc-res">Densité : <strong>${texteDensite(plante)}</strong>.
-      Renseigne la surface de ton jardin pour une estimation personnalisée.</p>`;
+    calc = `<p class="calc-res">${t("modale.calc.sanssurface", { densite: texteDensite(plante) })}</p>`;
   }
 
   const modale = $("#modale");
@@ -969,8 +983,8 @@ function ouvrirModale(plante) {
       <span class="emoji">${echapperHTML(plante.emoji)}</span>${imgTag}
     </div>
     <div class="modale-corps">
-      <h2>${echapperHTML(plante.nom)}${plante.perso ? `<span class="tag-perso">Ajoutée par toi</span>` : ""}${
-        plante.enracinee ? `<span class="tag-enracinee">🌱 Enracinée</span>` : ""}</h2>
+      <h2>${echapperHTML(plante.nom)}${plante.perso ? `<span class="tag-perso">${t("modale.ajouteeparToi")}</span>` : ""}${
+        plante.enracinee ? `<span class="tag-enracinee">${t("modale.enracinee")}</span>` : ""}</h2>
       <p class="latin">${echapperHTML(plante.latin)} — ${CATEGORIES[plante.cat].label}</p>
       <div class="modale-pictos">
         <span class="picto" title="${c.desc}">${c.picto} ${c.label}</span>
@@ -981,51 +995,51 @@ function ouvrirModale(plante) {
       <p class="long">${echapperHTML(plante.long)}</p>
 
       <div class="bloc">
-        <h4>📅 Calendrier (zone ${ZONES[state.zone].label})</h4>
-        <p style="margin:0">Semer / planter : <span class="${statut === "now" ? "cal-now" : ""}">${texteFenetre(plante, state.zone)}</span>${badge}</p>
-        <p style="margin:4px 0 0">Récolte : ${echapperHTML(plante.recolte)}</p>
+        <h4>${t("modale.calendrier", { zone: ZONES[state.zone].label })}</h4>
+        <p style="margin:0">${t("modale.semerplanter")}<span class="${statut === "now" ? "cal-now" : ""}">${texteFenetre(plante, state.zone)}</span>${badge}</p>
+        <p style="margin:4px 0 0">${t("modale.recolte")}${echapperHTML(plante.recolte)}</p>
       </div>
 
       <div class="bloc">
-        <h4>🌾 Estimation pour ton jardin</h4>
+        <h4>${t("modale.estimation")}</h4>
         ${calc}
       </div>
 
       ${estAdoptee(plante.id) ? `
       <div class="bloc bloc-suivi">
-        <h4>📆 Suivi de culture</h4>
-        <label class="suivi-date">Semé / planté le
+        <h4>${t("modale.suivi")}</h4>
+        <label class="suivi-date">${t("modale.suivi.date")}
           <input type="date" id="suivi-date" value="${echapperHTML(state.dates[plante.id] || "")}" />
         </label>
         <ul class="suivi-etapes" id="suivi-etapes"></ul>
-        <p class="suivi-note">Estimations indicatives, à ajuster à la météo réelle.</p>
+        <p class="suivi-note">${t("modale.suivi.note")}</p>
       </div>` : ""}
 
       <div class="bloc">
-        <h4>🧭 Fiche technique</h4>
+        <h4>${t("modale.fiche")}</h4>
         <div class="fiche">
-          <span class="k">Cycle</span><span class="v">${c.picto} ${c.label}</span>
-          <span class="k">Difficulté</span><span class="v">${d.picto} ${d.label}</span>
-          <span class="k">Exposition</span><span class="v">${sol.picto} ${sol.label}</span>
-          <span class="k">Encombrement</span><span class="v">${enc.picto} ${enc.label}</span>
-          <span class="k">Densité</span><span class="v">${texteDensite(plante)}</span>
-          <span class="k">Espacement</span><span class="v">${echapperHTML(plante.espacement)}</span>
+          <span class="k">${t("fiche.cycle")}</span><span class="v">${c.picto} ${c.label}</span>
+          <span class="k">${t("fiche.difficulte")}</span><span class="v">${d.picto} ${d.label}</span>
+          <span class="k">${t("fiche.exposition")}</span><span class="v">${sol.picto} ${sol.label}</span>
+          <span class="k">${t("fiche.encombrement")}</span><span class="v">${enc.picto} ${enc.label}</span>
+          <span class="k">${t("fiche.densite")}</span><span class="v">${texteDensite(plante)}</span>
+          <span class="k">${t("fiche.espacement")}</span><span class="v">${echapperHTML(plante.espacement)}</span>
         </div>
       </div>
 
       <div class="bloc">
-        <h4>💡 Conseils</h4>
+        <h4>${t("modale.conseils")}</h4>
         <ul class="conseils">${plante.conseils.map(x => `<li>${echapperHTML(x)}</li>`).join("")}</ul>
       </div>
 
       <div class="bloc" id="bloc-sachets">
-        <h4>🌾 Mes sachets archivés</h4>
+        <h4>${t("modale.sachets")}</h4>
         ${blocSachetsHTML(plante)}
       </div>
 
       <a class="lien-achat" href="${echapperHTML(lienAchat(plante))}" target="_blank" rel="noopener">
-        🛒 Où trouver graines / plants ${estSponsorise(plante) ? `<span class="spons">Lien partenaire ✦</span>` : ""}</a>
-      ${plante.perso ? `<button class="btn-danger" id="btn-suppr-perso" style="width:100%;margin-top:10px">🗑️ Supprimer cette plante ajoutée</button>` : ""}
+        ${t("lien.trouvergraines")} ${estSponsorise(plante) ? `<span class="spons">${t("lien.partenaire")}</span>` : ""}</a>
+      ${plante.perso ? `<button class="btn-danger" id="btn-suppr-perso" style="width:100%;margin-top:10px">${t("btn.supprplante")}</button>` : ""}
     </div>`;
 
   modale.querySelector(".fermer").addEventListener("click", fermerModale);
@@ -1047,7 +1061,7 @@ function ouvrirModale(plante) {
       const iso = state.dates[plante.id];
       if (!iso) {
         const li = el("li", "etape-vide");
-        li.textContent = "Renseigne la date pour prévoir les étapes.";
+        li.textContent = t("etape.vide");
         ul.appendChild(li);
         return;
       }
@@ -1076,7 +1090,7 @@ function ouvrirModale(plante) {
 
   const bs = modale.querySelector("#btn-suppr-perso");
   if (bs) bs.addEventListener("click", () => {
-    if (confirm(`Supprimer « ${plante.nom} » de ta base ?`)) supprimerPlante(plante.id);
+    if (confirm(t("confirm.supprplante", { nom: txt(plante.nom) }))) supprimerPlante(plante.id);
   });
   $("#overlay").classList.add("ouvert");
   document.body.style.overflow = "hidden";
@@ -1091,54 +1105,54 @@ function fermerModale() {
 function ouvrirFormAjout(prefill = "") {
   const opts = o => Object.entries(o)
     .map(([k, v]) => `<option value="${k}">${(v.picto ? v.picto + " " : "") + (v.label || k)}</option>`).join("");
-  const moisOpts = def => MOIS.map((m, i) =>
+  const moisOpts = def => MOIS_ACTIFS().map((m, i) =>
     `<option value="${i + 1}" ${i + 1 === def ? "selected" : ""}>${m}</option>`).join("");
 
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout">
-      <h2>➕ Ajouter une plante</h2>
-      <p class="sous">Enregistrée dans ton navigateur, elle apparaîtra comme les autres.</p>
+      <h2>${t("form.titre")}</h2>
+      <p class="sous">${t("form.sous")}</p>
       <div class="fgrid">
         <div class="fchamp full">
-          <label>Nom *</label>
+          <label>${t("form.nom")}</label>
           <div class="f-auto-row">
-            <input id="f-nom" value="${echapperHTML(prefill)}" placeholder="Ex. Topinambour" />
-            <button type="button" class="btn secondaire" id="f-auto">✨ Auto-remplir</button>
+            <input id="f-nom" value="${echapperHTML(prefill)}" placeholder="${t("form.nom.placeholder")}" />
+            <button type="button" class="btn secondaire" id="f-auto">${t("form.autoremplir")}</button>
           </div>
           <span id="f-auto-statut" style="font-size:12px;color:var(--texte-doux)"></span>
         </div>
-        <div class="fchamp"><label>Nom latin</label><input id="f-latin" placeholder="Facultatif" /></div>
-        <div class="fchamp"><label>Catégorie</label><select id="f-cat">${opts(CATEGORIES)}</select></div>
-        <div class="fchamp"><label>Emoji</label><input id="f-emoji" maxlength="4" placeholder="🌱" /></div>
-        <div class="fchamp"><label>Photo (URL)</label><input id="f-photo" placeholder="https://… (facultatif)" /></div>
-        <div class="fchamp"><label>Cycle</label><select id="f-cycle">${opts(CYCLES)}</select></div>
-        <div class="fchamp"><label>Difficulté</label><select id="f-diff">${opts(DIFFICULTES)}</select></div>
-        <div class="fchamp"><label>Encombrement</label><select id="f-enc">${opts(ENCOMBREMENTS)}</select></div>
-        <div class="fchamp"><label>Exposition</label><select id="f-soleil">${opts(SOLEILS)}</select></div>
-        <div class="fchamp"><label>Densité (pieds/m²)</label><input id="f-densite" type="number" min="0" step="0.5" value="9" /></div>
-        <div class="fchamp"><label>Espacement</label><input id="f-espacement" placeholder="Ex. 30 cm" /></div>
-        <div class="fchamp"><label>Semer/planter — début</label><select id="f-semis-deb">${moisOpts(3)}</select></div>
-        <div class="fchamp"><label>Semer/planter — fin</label><select id="f-semis-fin">${moisOpts(6)}</select></div>
-        <div class="fchamp full"><label>Période de récolte</label><input id="f-recolte" placeholder="Ex. Juillet → octobre" /></div>
-        <div class="fchamp full"><label>Description courte</label><input id="f-court" placeholder="Une phrase d'accroche" /></div>
-        <div class="fchamp full"><label>Description longue</label><textarea id="f-long" placeholder="Facultatif"></textarea></div>
-        <div class="fchamp full"><label>Conseils (un par ligne)</label><textarea id="f-conseils" placeholder="Un conseil par ligne"></textarea></div>
-        <div class="fchamp full"><label>Lien d'achat (affilié possible)</label><input id="f-lien" placeholder="https://… (facultatif)" /></div>
+        <div class="fchamp"><label>${t("form.latin")}</label><input id="f-latin" placeholder="${t("form.facultatif")}" /></div>
+        <div class="fchamp"><label>${t("form.categorie")}</label><select id="f-cat">${opts(CATEGORIES)}</select></div>
+        <div class="fchamp"><label>${t("form.emoji")}</label><input id="f-emoji" maxlength="4" placeholder="🌱" /></div>
+        <div class="fchamp"><label>${t("form.photo")}</label><input id="f-photo" placeholder="${t("form.photo.placeholder")}" /></div>
+        <div class="fchamp"><label>${t("form.cycle")}</label><select id="f-cycle">${opts(CYCLES)}</select></div>
+        <div class="fchamp"><label>${t("form.difficulte")}</label><select id="f-diff">${opts(DIFFICULTES)}</select></div>
+        <div class="fchamp"><label>${t("form.encombrement")}</label><select id="f-enc">${opts(ENCOMBREMENTS)}</select></div>
+        <div class="fchamp"><label>${t("form.exposition")}</label><select id="f-soleil">${opts(SOLEILS)}</select></div>
+        <div class="fchamp"><label>${t("form.densite")}</label><input id="f-densite" type="number" min="0" step="0.5" value="9" /></div>
+        <div class="fchamp"><label>${t("form.espacement")}</label><input id="f-espacement" placeholder="${t("form.espacement.placeholder")}" /></div>
+        <div class="fchamp"><label>${t("form.semisdeb")}</label><select id="f-semis-deb">${moisOpts(3)}</select></div>
+        <div class="fchamp"><label>${t("form.semisfin")}</label><select id="f-semis-fin">${moisOpts(6)}</select></div>
+        <div class="fchamp full"><label>${t("form.recolte")}</label><input id="f-recolte" placeholder="${t("form.recolte.placeholder")}" /></div>
+        <div class="fchamp full"><label>${t("form.court")}</label><input id="f-court" placeholder="${t("form.court.placeholder")}" /></div>
+        <div class="fchamp full"><label>${t("form.long")}</label><textarea id="f-long" placeholder="${t("form.facultatif")}"></textarea></div>
+        <div class="fchamp full"><label>${t("form.conseils")}</label><textarea id="f-conseils" placeholder="${t("form.conseils.placeholder")}"></textarea></div>
+        <div class="fchamp full"><label>${t("form.lien")}</label><input id="f-lien" placeholder="${t("form.photo.placeholder")}" /></div>
         <div class="fchamp inline full enracinement-option">
           <input id="f-enracinee" type="checkbox" />
           <label for="f-enracinee">
-            <strong>🌱 J’ai enraciné cette plante</strong>
-            <span>Elle pousse déjà chez moi. Cela ne publie pas encore d’offre de graines.</span>
+            <strong>${t("form.enracinee.titre")}</strong>
+            <span>${t("form.enracinee.sous")}</span>
           </label>
         </div>
-        <div class="fchamp inline full"><input id="f-frileux" type="checkbox" /><label for="f-frileux">Frileuse (sensible au gel — exclue en montagne)</label></div>
-        <div class="fchamp inline full"><input id="f-sponsorise" type="checkbox" /><label for="f-sponsorise">Lien sponsorisé (badge « Partenaire »)</label></div>
+        <div class="fchamp inline full"><input id="f-frileux" type="checkbox" /><label for="f-frileux">${t("form.frileux")}</label></div>
+        <div class="fchamp inline full"><input id="f-sponsorise" type="checkbox" /><label for="f-sponsorise">${t("form.sponsorise")}</label></div>
       </div>
       <div class="form-erreur" id="f-erreur" role="alert" hidden></div>
       <div class="form-actions">
-        <button class="btn secondaire" id="f-annuler">Annuler</button>
-        <button class="btn" id="f-enregistrer">Enregistrer la plante</button>
+        <button class="btn secondaire" id="f-annuler">${t("form.annuler")}</button>
+        <button class="btn" id="f-enregistrer">${t("form.enregistrer")}</button>
       </div>
     </div>`;
 
@@ -1184,6 +1198,9 @@ function ouvrirFormAjout(prefill = "") {
 }
 
 // Auto-remplissage de la fiche depuis Wikipédia (nom → résumé + photo + nom latin).
+// Note : on interroge toujours la Wikipédia FRANÇAISE (source la plus fiable
+// pour des variétés potagères courantes en France), quelle que soit la langue
+// d'interface — seuls les messages de statut du formulaire sont traduits.
 // Borné, mis en cache et non bloquant : échec avec message clair dans le formulaire.
 async function fetchWikipedia(titre) {
   const url = `https://fr.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(titre.replace(/ /g, "_"))}?redirect=true`;
@@ -1241,17 +1258,14 @@ async function autoRemplirFiche() {
   const nom = $("#f-nom").value.trim();
   const statut = $("#f-auto-statut");
   if (!nom) { $("#f-nom").focus(); return; }
-  statut.textContent = "Recherche sur Wikipédia…";
+  statut.textContent = t("auto.recherche");
   const data = await fetchWikipedia(nom);
   if (!data || data.notFound) {
-    statut.textContent = data && data.notFound
-      ? "Aucune page Wikipédia trouvée pour ce nom — remplis à la main."
-      : "Wikipédia injoignable pour le moment — remplis à la main.";
+    statut.textContent = data && data.notFound ? t("auto.introuvable") : t("auto.injoignable");
     return;
   }
   if (data.type === "disambiguation") {
-    statut.textContent = `« ${nom} » désigne plusieurs choses sur Wikipédia (homonymie) — `
-      + `précise (ex. « ${nom} commun », « ${nom} (plante) ») puis relance Auto-remplir.`;
+    statut.textContent = t("auto.homonymie", { nom });
     return;
   }
   const extrait = data.extract || "";
@@ -1274,12 +1288,11 @@ async function autoRemplirFiche() {
   if (latin && !g("latin").value.trim()) g("latin").value = latin;
 
   const manques = [];
-  if (!latin) manques.push("nom latin");
-  if (!photo) manques.push("photo");
+  if (!latin) manques.push(t("auto.manque.latin"));
+  if (!photo) manques.push(t("auto.manque.photo"));
   statut.textContent = manques.length
-    ? `✓ Rempli depuis Wikipédia (${manques.join(" et ")} introuvable${manques.length > 1 ? "s" : ""}`
-      + ` — l'emoji sert d'illustration) — relis avant d'enregistrer.`
-    : "✓ Rempli depuis Wikipédia + Wikidata (texte, nom latin, photo) — relis avant d'enregistrer.";
+    ? t("auto.rempli.manque", { manques: manques.join(t("auto.et")), s: manques.length > 1 ? "s" : "" })
+    : t("auto.rempli.ok");
 }
 
 // ---------- Photos manquantes : récupération automatique (Wikipédia) ----------
@@ -1330,8 +1343,10 @@ async function completerPhotosManquantes() {
   cibles.forEach(p => photosEnAttente.add(p.id));
   let trouvee = false;
   for (const plante of cibles) {
-    // Le nom latin cible l'espèce sans ambiguïté ; le nom courant sert de repli.
-    const requetes = [plante.latin, plante.nom].filter(t => t && t !== "—");
+    // Le nom latin cible l'espèce sans ambiguïté ; le nom courant (français,
+    // langue de la Wikipédia interrogée) sert de repli.
+    const nomRef = typeof plante.nom === "object" && plante.nom && "fr" in plante.nom ? plante.nom.fr : String(plante.nom);
+    const requetes = [plante.latin, nomRef].filter(t => t && t !== "—");
     let url = "";
     for (const titre of requetes) {
       const data = await fetchWikipedia(titre);
@@ -1376,15 +1391,13 @@ function enregistrerPlante() {
   $("#modale").querySelectorAll("[aria-invalid=true]")
     .forEach(champ => champ.removeAttribute("aria-invalid"));
   if (!nom) {
-    afficherErreurForm("Le nom de la plante est obligatoire.", g("nom"));
+    afficherErreurForm(t("erreur.nomrequis"), g("nom"));
     return;
   }
   const photoUrl = g("photo").value.trim();
   if (!estImageValide(photoUrl)) {
-    g("photo").title = "URL non reconnue comme image (jpg/png/webp/gif attendu — pas de .ogg/.svg/vidéo)";
-    afficherErreurForm(
-      "La photo doit utiliser une URL HTTP(S) vers une image JPG, PNG, WebP, GIF ou AVIF.",
-      g("photo"));
+    g("photo").title = t("erreur.photo.title");
+    afficherErreurForm(t("erreur.photo"), g("photo"));
     return;
   }
   let deb = +g("semis-deb").value, fin = +g("semis-fin").value;
@@ -1400,14 +1413,14 @@ function enregistrerPlante() {
     frileux: g("frileux").checked,
     enracinee: g("enracinee").checked,
     semis: [[deb, fin]], recolte: g("recolte").value.trim() || "—",
-    court: g("court").value.trim() || "Plante ajoutée par toi.",
-    long: g("long").value.trim() || g("court").value.trim() || "Plante ajoutée par toi.",
+    court: g("court").value.trim() || t("plante.ajouteeparToi"),
+    long: g("long").value.trim() || g("court").value.trim() || t("plante.ajouteeparToi"),
     conseils: g("conseils").value.split("\n").map(s => s.trim()).filter(Boolean),
     lien: g("lien").value.trim() || "", sponsorise: g("sponsorise").checked,
   };
   const resultat = validerPlantePerso(candidate);
   if (!resultat.valide) {
-    afficherErreurForm(`Impossible d'enregistrer : ${resultat.erreurs.join(" ")}`);
+    afficherErreurForm(t("erreur.enregistrement", { erreurs: resultat.erreurs.join(" ") }));
     return;
   }
   const p = resultat.plante;
@@ -1428,9 +1441,9 @@ function enregistrerPlante() {
 function demanderSiPlantee(p, contexte = "ajout") {
   const auj = dateDuJour().toISOString().slice(0, 10);
   const titre = contexte === "sachet"
-    ? `Sachet archivé ✅` : `${echapperHTML(p.nom)} ajoutée ✅`;
+    ? t("plantee.titre.sachet") : t("plantee.titre.ajout", { nom: echapperHTML(txt(p.nom)) });
   const sous = contexte === "sachet"
-    ? `Il est rattaché à ${echapperHTML(p.nom)}.` : `Elle fait maintenant partie de ta base.`;
+    ? t("plantee.sous.sachet", { nom: echapperHTML(txt(p.nom)) }) : t("plantee.sous.ajout");
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="modale-img" style="background:${fondCarte(p)}">
@@ -1441,16 +1454,15 @@ function demanderSiPlantee(p, contexte = "ajout") {
       <h2>${titre}</h2>
       <p class="latin">${sous}</p>
       <div class="bloc">
-        <h4>🌱 Tu l'as déjà en terre ?</h4>
-        <p style="margin:0 0 12px;font-size:14px">Si oui, je la mets dans « Mon potager »
-          et je te préviendrai pour l'arrosage, l'entretien et la récolte.</p>
+        <h4>${t("plantee.question")}</h4>
+        <p style="margin:0 0 12px;font-size:14px">${t("plantee.explication")}</p>
         <div class="fchamp" id="bloc-date">
-          <label for="q-date">Date de plantation</label>
+          <label for="q-date">${t("plantee.date")}</label>
           <input id="q-date" type="date" value="${auj}" max="${auj}" />
         </div>
         <div class="form-actions">
-          <button class="btn secondaire" id="q-non">Pas encore</button>
-          <button class="btn" id="q-oui">✓ Oui, elle est plantée</button>
+          <button class="btn secondaire" id="q-non">${t("plantee.non")}</button>
+          <button class="btn" id="q-oui">${t("plantee.oui")}</button>
         </div>
       </div>
     </div>`;
@@ -1470,23 +1482,23 @@ function demanderSiPlantee(p, contexte = "ajout") {
 
 // ---------- Filtres ----------
 const FILTRES_CAT = [
-  { k: "tous", label: "Tout" },
-  { k: "legume", label: "🥕 Légumes" },
-  { k: "fruit", label: "🍓 Fruits" },
-  { k: "aromatique", label: "🌿 Aromatiques" },
-  { k: "exotique", label: "🥭 Exotiques" },
+  { k: "tous", cle: "filtre.tout" },
+  { k: "legume", cle: "filtre.legumes" },
+  { k: "fruit", cle: "filtre.fruits" },
+  { k: "aromatique", cle: "filtre.aromatiques" },
+  { k: "exotique", cle: "filtre.exotiques" },
 ];
 const FILTRES_CYCLE = [
-  { k: "annuelle", label: "🌱 Annuelles" },
-  { k: "bisannuelle", label: "🔄 Bisannuelles" },
-  { k: "vivace", label: "♻️ Vivaces" },
+  { k: "annuelle", cle: "filtre.annuelles" },
+  { k: "bisannuelle", cle: "filtre.bisannuelles" },
+  { k: "vivace", cle: "filtre.vivaces" },
 ];
 
 function construireFiltres() {
   const nav = $("#filtres");
   nav.innerHTML = "";
   FILTRES_CAT.forEach(f => {
-    const chip = el("button", "chip" + (state.categorie === f.k ? " actif" : ""), f.label);
+    const chip = el("button", "chip" + (state.categorie === f.k ? " actif" : ""), t(f.cle));
     chip.addEventListener("click", () => { state.categorie = f.k; sauverPreferencesJardin(); rendre(); });
     nav.appendChild(chip);
   });
@@ -1494,11 +1506,11 @@ function construireFiltres() {
   nav.appendChild(sep1);
   FILTRES_CYCLE.forEach(f => {
     const actif = state.cycle === f.k;
-    const chip = el("button", "chip" + (actif ? " actif" : ""), f.label);
+    const chip = el("button", "chip" + (actif ? " actif" : ""), t(f.cle));
     chip.addEventListener("click", () => { state.cycle = actif ? "tous" : f.k; sauverPreferencesJardin(); rendre(); });
     nav.appendChild(chip);
   });
-  const chipPe = el("button", "chip" + (state.petitsEspaces ? " actif" : ""), "📦 Petits espaces");
+  const chipPe = el("button", "chip" + (state.petitsEspaces ? " actif" : ""), t("filtre.petits"));
   chipPe.addEventListener("click", () => { state.petitsEspaces = !state.petitsEspaces; sauverPreferencesJardin(); rendre(); });
   nav.appendChild(chipPe);
 
@@ -1514,7 +1526,8 @@ function planteVisible(p) {
   if (state.petitsEspaces && p.encombrement === "gourmand") return false;
   if (state.recherche) {
     const q = normaliseVille(state.recherche);
-    const cible = normaliseVille(p.nom + " " + p.latin);
+    const cible = normaliseVille(txt(p.nom) + " " + p.latin
+      + (typeof p.nom === "object" && p.nom && "en" in p.nom ? " " + p.nom.en : ""));
     if (!cible.includes(q)) return false;
   }
   return true;
@@ -1534,14 +1547,14 @@ function rendre() {
   // Bandeau date visible
   const dj = $("#date-jour");
   if (dj) {
-    const fmt = aujourdhui.toLocaleDateString("fr-FR",
+    const fmt = aujourdhui.toLocaleDateString(localeCourante(),
       { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-    dj.textContent = `📅 Aujourd'hui : ${fmt}`;
+    dj.textContent = t("datedujour", { date: fmt });
   }
   const sousNow = document.querySelector("#section-now .section-sous");
   if (sousNow) {
-    const fmtCourt = aujourdhui.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
-    sousNow.textContent = `Nous sommes le ${fmtCourt} : c'est le bon moment pour semer ou planter ces variétés dans ta zone.`;
+    const fmtCourt = aujourdhui.toLocaleDateString(localeCourante(), { day: "numeric", month: "long" });
+    sousNow.textContent = t("now.sous", { date: fmtCourt });
   }
 
   construireFiltres();
@@ -1554,7 +1567,7 @@ function rendre() {
     else if (s === "soon") soon.push(p);
     else autres.push(p);
   });
-  const parNom = (a, b) => a.nom.localeCompare(b.nom, "fr");
+  const parNom = (a, b) => a.nom.localeCompare(b.nom);
   now.sort(parNom); soon.sort(parNom); autres.sort(parNom);
 
   state._nowCount = now.length;
@@ -1568,20 +1581,20 @@ function rendre() {
   vide.hidden = visibles.length !== 0;
   if (!vide.hidden) {
     vide.innerHTML = state.recherche
-      ? `Aucune plante ne correspond à « ${echapperHTML(state.recherche)} ».<br>
+      ? `${t("vide.recherche", { q: echapperHTML(state.recherche) })}<br>
          <button class="btn" id="btn-ajouter-vide" style="margin-top:10px">
-           ➕ Ajouter « ${echapperHTML(state.recherche)} » à la base</button>`
-      : "Aucune variété ne correspond à ces filtres.";
+           ${t("vide.ajouter", { q: echapperHTML(state.recherche) })}</button>`
+      : t("vide.defaut");
     const b = $("#btn-ajouter-vide");
     if (b) b.addEventListener("click", () => ouvrirFormAjout(state.recherche));
   }
   const tc = document.querySelector("#total-count");
-  if (tc) tc.textContent = `${visibles.length} variété${visibles.length > 1 ? "s" : ""} adaptée${visibles.length > 1 ? "s" : ""}`;
+  if (tc) tc.textContent = t(visibles.length > 1 ? "total.count.pl" : "total.count", { n: visibles.length });
 
   const sousAutres = $("#autres-sous");
   if (sousAutres) sousAutres.textContent = state.surface
-    ? `Estimations calculées pour un jardin de ${state.surface} m².`
-    : "Toutes les cultures qui s'accommodent de ton climat.";
+    ? t("autres.sous.surface", { surface: state.surface })
+    : t("autres.sous.defaut");
 
   majMonPotager();
   if (document.body.classList.contains("configure")) majResume();
@@ -1599,21 +1612,21 @@ function rendreLune() {
   b.innerHTML = `
     <span class="lune-emoji">${l.emoji}</span>
     <span class="lune-txt">
-      <span class="lune-titre">${l.phase} · lune ${l.croissante ? "croissante" : "décroissante"}
-        et ${l.montante ? "montante ↗" : "descendante ↘"}</span>
+      <span class="lune-titre">${l.phase} · lune ${l.croissante ? t("lune.croissante") : t("lune.decroissante")}
+        et ${l.montante ? t("lune.montante") : t("lune.descendante")}</span>
       <span class="lune-sous">${l.conseil}${
-        match.length ? ` — ${match.length} de tes plantes en profite${match.length > 1 ? "nt" : ""}.` : ""}</span>
+        match.length ? t(match.length > 1 ? "lune.aprofitent" : "lune.aprofite", { n: match.length }) : ""}</span>
     </span>
     <span class="lune-jour ${match.length ? "match" : ""}">${l.pictoJour} ${l.label}</span>`;
 }
 
 function ouvrirModaleLune() {
   const l = state._lune || infosLune(dateDuJour());
-  const fmt = d => d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-  const prochains = ["racine", "feuille", "fleur", "fruit"].map(t => {
-    const d = prochainJour(t, dateDuJour());
-    const info = { racine: "🥕", feuille: "🥬", fleur: "🌸", fruit: "🍅" }[t];
-    return `<span class="k">${info} Jour ${t}</span><span class="v">${d ? fmt(d) : "—"}</span>`;
+  const fmt = d => d.toLocaleDateString(localeCourante(), { weekday: "long", day: "numeric", month: "long" });
+  const prochains = ["racine", "feuille", "fleur", "fruit"].map(typ => {
+    const d = prochainJour(typ, dateDuJour());
+    const info = { racine: "🥕", feuille: "🥬", fleur: "🌸", fruit: "🍅" }[typ];
+    return `<span class="k">${info} ${TYPES_JOUR[typ].label}</span><span class="v">${d ? fmt(d) : "—"}</span>`;
   }).join("");
 
   const favorites = PLANTES.filter(p => typeLunairePlante(p) === l.typeJour
@@ -1626,32 +1639,28 @@ function ouvrirModaleLune() {
     </div>
     <div class="modale-corps">
       <h2>${l.phase}</h2>
-      <p class="latin">Lune de ${l.age} jour(s) · constellation du ${l.constellation}</p>
+      <p class="latin">${t("lune.agejours", { age: l.age, constellation: l.constellation })}</p>
       <div class="modale-pictos">
-        <span class="picto">${l.croissante ? "🌒 Croissante" : "🌘 Décroissante"}</span>
-        <span class="picto">${l.montante ? "↗ Montante" : "↘ Descendante"}</span>
+        <span class="picto">${l.croissante ? t("lune.croissantelabel") : t("lune.decroissantelabel")}</span>
+        <span class="picto">${l.montante ? t("lune.montantelabel") : t("lune.descendantelabel")}</span>
         <span class="picto">${l.pictoJour} ${l.label}</span>
       </div>
       <p class="long">${l.conseil}</p>
 
       <div class="bloc">
-        <h4>${l.pictoJour} Aujourd'hui, on favorise…</h4>
+        <h4>${t("lune.favorise", { picto: l.pictoJour })}</h4>
         <p style="margin:0">${l.cible}</p>
-        ${favorites.length ? `<p style="margin:8px 0 0">À planter maintenant et en phase avec le jour :
-          <strong>${favorites.map(p => p.nom).join(", ")}</strong>.</p>` : ""}
+        ${favorites.length ? `<p style="margin:8px 0 0">${t("lune.aplanteret", { liste: favorites.map(p => echapperHTML(txt(p.nom))).join(", ") })}</p>` : ""}
       </div>
 
       <div class="bloc">
-        <h4>📅 Prochains jours favorables</h4>
+        <h4>${t("lune.prochains")}</h4>
         <div class="fiche">${prochains}</div>
       </div>
 
       <div class="bloc">
-        <h4>ℹ️ À savoir</h4>
-        <p style="margin:0;font-size:14px">Les positions de la Lune sont calculées précisément.
-        Le découpage racine / feuille / fleur / fruit relève, lui, d'une tradition de jardinage
-        (biodynamie) dont l'effet n'est pas démontré scientifiquement : à prendre comme un repère
-        de rythme, jamais avant la météo et l'état réel de ton sol.</p>
+        <h4>${t("lune.asavoir")}</h4>
+        <p style="margin:0;font-size:14px">${t("lune.disclaimer")}</p>
       </div>
     </div>`;
   $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
@@ -1667,11 +1676,11 @@ function ouvrirModaleRessources() {
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout">
-      <h2>🧰 Mes ressources</h2>
-      <p class="sous">Dis-moi ce que tu as sous la main : je te le rappellerai au bon moment.</p>
+      <h2>${t("ressources.titre")}</h2>
+      <p class="sous">${t("ressources.sous")}</p>
 
       <div class="bloc">
-        <h4>Ce que je possède (${possedees.length})</h4>
+        <h4>${t("ressources.possede", { n: possedees.length })}</h4>
         ${possedees.length ? `<div class="res-liste">${possedees.map(k => {
           const r = RESSOURCES_CATALOGUE[k];
           const pu = prochaineUtilisation(r);
@@ -1679,16 +1688,16 @@ function ouvrirModaleRessources() {
             <span class="res-nom">${r.label}<br><span class="res-quand">${r.quand}</span>
               <br><span class="res-quand" style="color:${pu.maintenant ? "var(--vert-fonce)" : "var(--texte-doux)"};font-weight:700">
                 ${pu.maintenant ? "🔔 " : "🕒 "}${pu.texte}</span></span>
-            <button class="res-suppr" data-suppr="${k}">Retirer</button></div>`;
+            <button class="res-suppr" data-suppr="${k}">${t("ressources.retirer")}</button></div>`;
         }).join("")}</div>` : `<p style="margin:0;font-size:14px;color:var(--texte-doux)">
-          Rien pour l'instant — ajoute ce que tu as ci-dessous.</p>`}
+          ${t("ressources.rien")}</p>`}
       </div>
 
       <div class="bloc">
-        <h4>Ajouter</h4>
+        <h4>${t("ressources.ajouter")}</h4>
         <div class="res-choix">${dispo.map(([k, r]) =>
           `<button data-add="${k}"><span class="rc-emoji">${r.emoji}</span>${r.label}</button>`).join("")
-          || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Tu as déjà tout ajouté 👍</p>`}</div>
+          || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">${t("ressources.toutajoute")}</p>`}</div>
       </div>
     </div>`;
 
@@ -1733,13 +1742,13 @@ function rendreEtapes() {
   if (compteur) compteur.textContent = liste.length + sugg.length;
   sugg.forEach(s => {
     const cibles = s.concernees.length
-      ? ` — pour ${s.concernees.map(p => p.nom).join(", ")}`
+      ? t("ressource.pourliste", { liste: s.concernees.map(p => echapperHTML(txt(p.nom))).join(", ") })
       : "";
     const ligne = el("button", "etape-ligne etape-ressource");
     ligne.innerHTML = `
-      <span class="etape-date">Ce mois-ci</span>
+      <span class="etape-date">${t("etapes.cemois")}</span>
       <span class="etape-plante">${s.emoji} ${echapperHTML(s.label)}</span>
-      <span class="etape-label">💡 ${echapperHTML(s.quand)}${echapperHTML(cibles)}</span>
+      <span class="etape-label">💡 ${echapperHTML(s.quand)}${cibles}</span>
       <span class="lg-chevron">›</span>`;
     ligne.addEventListener("click", () => ouvrirModaleRessource(s.cle));
     conteneur.appendChild(ligne);
@@ -1761,20 +1770,22 @@ function ouvrirModaleRessource(cle) {
     </div>
     <div class="modale-corps">
       <h2>${echapperHTML(r.label)}</h2>
-      <p class="latin">Ta ressource · ${echapperHTML(r.quand)}</p>
+      <p class="latin">${t("ressource.detail.souscat", { quand: echapperHTML(r.quand) })}</p>
       <p class="long">${echapperHTML(r.conseil)}</p>
       <div class="bloc">
-        <h4>📅 Période d'emploi</h4>
+        <h4>${t("ressource.periode")}</h4>
         <p style="margin:0">${mois}</p>
       </div>
       <div class="bloc">
-        <h4>🎯 Sur quoi l'utiliser</h4>
+        <h4>${t("ressource.surquoi")}</h4>
         <p style="margin:0">${miennes.length
-          ? `Dans <strong>ton</strong> potager : ${miennes.map(p => `${p.emoji} ${p.nom}`).join(", ")}.`
-          : `Aucune de tes plantes adoptées n'est concernée pour l'instant.`}</p>
+          ? t("ressource.tonpotager", { liste: miennes.map(p => `${p.emoji} ${echapperHTML(txt(p.nom))}`).join(", ") })
+          : t("ressource.aucune")}</p>
         <p style="margin:8px 0 0;font-size:13.5px;color:var(--texte-doux)">
-          Plantes adaptées en général : ${concernees.slice(0, 10).map(p => p.nom).join(", ")}${
-            concernees.length > 10 ? "…" : ""}</p>
+          ${t("ressource.adapteesgeneral", {
+            liste: concernees.slice(0, 10).map(p => echapperHTML(txt(p.nom))).join(", "),
+            suite: concernees.length > 10 ? "…" : "",
+          })}</p>
       </div>
     </div>`;
   $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
@@ -1785,11 +1796,11 @@ function ouvrirModaleRessource(cle) {
 // ---------- Repli du bandeau ----------
 function majResume() {
   const z = ZONES[state.zone];
-  const fmt = dateDuJour().toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  const fmt = dateDuJour().toLocaleDateString(localeCourante(), { day: "numeric", month: "long" });
   const items = [`<span class="bc-item">${z.emoji} ${z.label}</span>`];
   if (state.surface) items.push(`<span class="bc-item">📐 ${state.surface} m²</span>`);
   items.push(`<span class="bc-item">📅 ${fmt}</span>`);
-  items.push(`<span class="bc-item">🌱 ${state._nowCount || 0} à planter</span>`);
+  items.push(`<span class="bc-item">🌱 ${state._nowCount || 0} ${getLang() === "en" ? "to plant" : "à planter"}</span>`);
   const r = $("#bc-resume"); if (r) r.innerHTML = items.join("");
 }
 function replier() {
@@ -1813,7 +1824,7 @@ async function commit() {
       // Pas de sélection dans la liste : on géocode le texte saisi.
       const res = await geocodeVille(q);
       if (res.length) choisirVille(res[0]);
-      else majZone(state.zone, `« ${q} » introuvable — ajuste le climat`);
+      else majZone(state.zone, t("ville.introuvable2", { v: q }));
     }
   }
   sauverPreferencesJardin();
@@ -1848,8 +1859,74 @@ function majZone(zone, source) {
   rendre();
 }
 
+// ---------- Langue : sélecteur + traduction du texte statique ----------
+function construireSelecteurLangue() {
+  const zone = $("#lang-switch");
+  if (!zone) return;
+  zone.innerHTML = "";
+  [["fr", "FR"], ["en", "EN"]].forEach(([code, libelle]) => {
+    const b = el("button", getLang() === code ? "actif" : "", libelle);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(getLang() === code));
+    b.title = t(code === "fr" ? "lang.fr" : "lang.en");
+    b.addEventListener("click", () => setLang(code));
+    zone.appendChild(b);
+  });
+}
+
+// Traduit tout le texte statique de index.html (hors contenu géré par rendre()).
+function traduireStatique() {
+  document.documentElement.lang = getLang();
+  const titre = $("#page-title"); if (titre) titre.textContent = t("page.title");
+  const desc = $("#page-description"); if (desc) desc.setAttribute("content", t("page.description"));
+  document.title = t("page.title");
+
+  const set = (sel, html) => { const e = $(sel); if (e) e.innerHTML = html; };
+  const attr = (sel, name, val) => { const e = $(sel); if (e) e.setAttribute(name, val); };
+
+  set("#hero-titre", t("hero.titre"));
+  set("#hero-intro", t("hero.intro"));
+  set("#footer-marque", t("footer.marque"));
+  set("#footer-note", t("footer.note"));
+  set("#label-ville", t("champ.ville.label"));
+  set("#label-surface", t("champ.surface.label"));
+  set("#label-zone", t("champ.zone.label"));
+  set("#plan-titre", t("plan.titre"));
+  set("#plan-aide", t("plan.aide"));
+  set("#etapes-titre", t("etapes.titre"));
+  set("#etapes-sous", t("etapes.sous"));
+  set("#now-titre", t("now.titre"));
+  set("#soon-titre", t("soon.titre"));
+  set("#autres-titre", t("autres.titre"));
+  set("#autres-sous", t("autres.sous.defaut"));
+  set("#vide", t("vide.defaut"));
+  set("#btn-modifier", t("bc.modifier"));
+  set("#btn-geo", t("btn.geo"));
+  attr("#btn-geo", "title", t("btn.geo.title"));
+  set("#btn-go", t("btn.go"));
+  set("#zone-note", t("zone.note.defaut"));
+  set("#btn-ajouter", t("btn.ajouter"));
+  set("#btn-ressources", t("btn.ressources"));
+  set("#btn-photo", t("btn.photo"));
+  set("#btn-plan", t("btn.plan"));
+  attr("#vue-liste", "title", t("vue.liste.title"));
+  attr("#vue-cartes", "title", t("vue.cartes.title"));
+  attr("#vue-toggle", "aria-label", t("affichage.label"));
+  attr("#filtres", "aria-label", t("filtres.aria"));
+  attr("#bandeau-lune", "title", t("lune.bandeau.title"));
+  attr("#surface", "placeholder", t("champ.surface.placeholder"));
+  attr("#ville", "placeholder", t("champ.ville.placeholder"));
+  attr("#recherche", "placeholder", t("recherche.placeholder"));
+  attr("#plan-taille-jardin-btn", "data-noop", "");
+  const btnTaille = $("#btn-taille-jardin"); if (btnTaille) btnTaille.textContent = t("plan.taille.btn");
+  majMonPotager();
+}
+
 // ---------- Init ----------
 function init() {
+  traduireStatique();
+  construireSelecteurLangue();
+
   // Peupler le select des zones
   const sel = $("#zone");
   Object.entries(ZONES).forEach(([k, z]) => {
@@ -1861,7 +1938,7 @@ function init() {
   $("#vue-liste").classList.toggle("actif", state.vue === "liste");
   $("#vue-cartes").classList.toggle("actif", state.vue === "cartes");
 
-  sel.addEventListener("change", () => majZone(sel.value, "Choix manuel"));
+  sel.addEventListener("change", () => majZone(sel.value, getLang() === "en" ? "Manual choice" : "Choix manuel"));
 
   // Autocomplétion de ville (BAN)
   const inputVille = $("#ville");
@@ -1951,21 +2028,21 @@ function appliquerVille() {
   if (!v.trim()) return;
   const z = zoneDepuisVille(v);
   if (z) majZone(z, `📍 ${v.trim()}`);
-  else majZone(state.zone, `“${v.trim()}” non reconnue — ajuste le climat`);
+  else majZone(state.zone, t("ville.introuvable", { v: v.trim() }));
 }
 
 function localiser() {
   const note = $("#zone-note");
-  if (!navigator.geolocation) { note.textContent = "Géolocalisation non disponible sur ce navigateur."; return; }
-  note.textContent = "Localisation en cours…";
+  if (!navigator.geolocation) { note.textContent = t("geo.indisponible"); return; }
+  note.textContent = t("geo.encours");
   navigator.geolocation.getCurrentPosition(
     async pos => {
       const { latitude, longitude } = pos.coords;
       let z = zoneDepuisCoords(latitude, longitude);
-      majZone(z, "📡 Position détectée (estimation)");
-      note.textContent = "Recherche de ta ville…";
+      majZone(z, t("geo.positiondetectee"));
+      note.textContent = t("geo.recherchecommune");
       const v = await reverseVille(latitude, longitude);
-      let source = "📡 Position détectée (estimation)";
+      let source = t("geo.positiondetectee");
       if (v) {
         $("#ville").value = v.nom;                 // on remplit la préférence "ville"
         state.villeCoords = { lat: v.lat, lng: v.lng };
@@ -1978,7 +2055,7 @@ function localiser() {
       // Ici l'altitude est celle du GPS : c'est le cas le plus fiable, on l'utilise.
       appliquerAltitude(latitude, longitude, z, source);
     },
-    () => { note.textContent = "Localisation refusée. Saisis ta ville ou choisis le climat."; },
+    () => { note.textContent = t("geo.refusee"); },
     { timeout: 8000, maximumAge: 600000 }
   );
 }
@@ -1996,14 +2073,12 @@ document.addEventListener("DOMContentLoaded", init);
 function blocSachetsHTML(plante) {
   const liste = typeof sachetsDe === "function" ? sachetsDe(plante.id) : [];
   if (!liste.length) {
-    return `<p style="margin:0;font-size:14px;color:var(--texte-doux)">
-      Aucun sachet archivé. Utilise <strong>📷 Photo sachet</strong> pour garder
-      la trace de la variété et des consignes du semencier.</p>`;
+    return `<p style="margin:0;font-size:14px;color:var(--texte-doux)">${t("sachet.aucun")}</p>`;
   }
   return `<div class="sachets-grille">${liste.map(s => `
     <button class="sachet-vignette" data-sachet="${echapperHTML(s.id)}"
-            title="${echapperHTML(s.meta.variete || plante.nom)}">
-      <img src="${s.thumb}" alt="Sachet ${echapperHTML(plante.nom)}" />
+            title="${echapperHTML(s.meta.variete || txt(plante.nom))}">
+      <img src="${s.thumb}" alt="${t("sachet.alt", { nom: echapperHTML(txt(plante.nom)) })}" />
       <span class="sv-date">${echapperHTML(s.meta.variete || fmtDateCourte(new Date(s.meta.ajoute)))}</span>
     </button>`).join("")}</div>`;
 }
@@ -2019,17 +2094,17 @@ async function ouvrirSachet(id) {
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout">
-      <h2>🌾 ${echapperHTML(m.variete || (plante ? plante.nom : "Sachet"))}</h2>
-      <p class="sous">${plante ? echapperHTML(plante.nom) : ""} · archivé le
+      <h2>🌾 ${echapperHTML(m.variete || (plante ? txt(plante.nom) : t("sachet.titredefaut")))}</h2>
+      <p class="sous">${plante ? echapperHTML(txt(plante.nom)) : ""} · ${t("sachet.archivele")}
         ${echapperHTML(fmtDateCourte(new Date(m.ajoute)))}</p>
-      <img class="sachet-plein" src="${s.full}" alt="Sachet de graines" />
-      ${(m.semencier || m.annee || m.notes) ? `<div class="bloc"><h4>Informations relevées</h4>
-        <div class="fiche">${ligne("Semencier", m.semencier)}${ligne("Année / DLUO", m.annee)}</div>
+      <img class="sachet-plein" src="${s.full}" alt="${t("sachet.titredefaut")}" />
+      ${(m.semencier || m.annee || m.notes) ? `<div class="bloc"><h4>${t("sachet.infos")}</h4>
+        <div class="fiche">${ligne(t("sachet.semencier"), m.semencier)}${ligne(t("sachet.anneedluo"), m.annee)}</div>
         ${m.notes ? `<p style="margin:8px 0 0;font-size:14px">${echapperHTML(m.notes)}</p>` : ""}
       </div>` : ""}
       <div class="form-actions">
-        <button class="btn secondaire" id="s-retour">← Retour à la fiche</button>
-        <button class="btn-danger" id="s-suppr">🗑️ Supprimer</button>
+        <button class="btn secondaire" id="s-retour">${t("sachet.retour")}</button>
+        <button class="btn-danger" id="s-suppr">${t("sachet.supprimer")}</button>
       </div>
     </div>`;
 
@@ -2044,12 +2119,12 @@ async function ouvrirSachet(id) {
 
 // Étape 1 : l'utilisateur vient de prendre la photo → à quelle plante la rattacher ?
 async function traiterPhotoSachet(fichier) {
-  ouvrirAttente("Traitement de la photo…");
+  ouvrirAttente(t("sachet.traitement"));
   let photo;
   try {
     photo = await preparerPhoto(fichier);
   } catch (e) {
-    ouvrirMessage("Photo illisible", "Ce fichier n'a pas pu être lu comme une image. Réessaie.");
+    ouvrirMessage(t("sachet.illisible.titre"), t("sachet.illisible.msg"));
     return;
   }
   state._photoEnCours = photo;
@@ -2062,44 +2137,45 @@ function ecranAssociation(filtre) {
   if (!photo) return;
   const q = normaliseVille(filtre || "");
   const candidats = (q
-    ? PLANTES.filter(p => normaliseVille(p.nom + " " + p.latin).includes(q))
+    ? PLANTES.filter(p => normaliseVille(txt(p.nom) + " " + p.latin
+        + (typeof p.nom === "object" && p.nom && "en" in p.nom ? " " + p.nom.en : "")).includes(q))
     : PLANTES.filter(p => estAdoptee(p.id) || (state._statut && state._statut(p) === "now"))
   ).slice(0, 12);
 
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout">
-      <h2>📷 Sachet photographié</h2>
-      <p class="sous">Rattache-le à une plante : il servira de guide et d'archive.</p>
-      <img class="photo-preview" src="${photo.thumb}" alt="Aperçu du sachet" />
+      <h2>${t("sachet.photographie")}</h2>
+      <p class="sous">${t("sachet.rattacher")}</p>
+      <img class="photo-preview" src="${photo.thumb}" alt="${t("sachet.apercu")}" />
 
       <div class="fgrid" style="margin-top:14px">
         <div class="fchamp full">
-          <label for="s-recherche">Quelle plante ?</label>
+          <label for="s-recherche">${t("sachet.quelleplante")}</label>
           <input id="s-recherche" type="text" value="${echapperHTML(filtre || "")}"
-                 placeholder="Tape le nom lu sur le sachet…" autocomplete="off" />
+                 placeholder="${t("sachet.tapelenom")}" autocomplete="off" />
         </div>
       </div>
       <div class="assoc-liste">
         ${candidats.map(p => `
           <button class="assoc-item" data-plante="${echapperHTML(p.id)}">
             <span class="ai-emoji">${p.emoji}</span>
-            <span class="ai-nom">${echapperHTML(p.nom)}</span>
+            <span class="ai-nom">${echapperHTML(txt(p.nom))}</span>
             <span class="ai-cat">${CATEGORIES[p.cat].label}</span>
           </button>`).join("")
-        || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Aucune plante connue sous ce nom.</p>`}
+        || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">${t("sachet.aucuneconnue")}</p>`}
         <button class="assoc-item assoc-nouvelle" id="s-nouvelle">
-          ➕ Créer une nouvelle fiche${filtre ? ` pour « ${echapperHTML(filtre)} »` : ""}</button>
+          ${filtre ? t("sachet.creerfichepour", { filtre: echapperHTML(filtre) }) : t("sachet.creerfiche")}</button>
       </div>
     </div>`;
 
   $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
   const champ = $("#s-recherche");
-  let t = null;
+  let tmr = null;
   champ.addEventListener("input", () => {
-    clearTimeout(t);
+    clearTimeout(tmr);
     const v = champ.value;
-    t = setTimeout(() => {
+    tmr = setTimeout(() => {
       const pos = champ.selectionStart;
       ecranAssociation(v);
       const nouveau = $("#s-recherche");
@@ -2131,26 +2207,26 @@ function ecranDetailsSachet(plante) {
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout">
-      <h2>${plante.emoji} ${echapperHTML(plante.nom)}</h2>
-      <p class="sous">Recopie ce qui est utile sur le sachet (tout est facultatif).</p>
-      <img class="photo-preview" src="${photo.thumb}" alt="Aperçu du sachet" />
+      <h2>${plante.emoji} ${echapperHTML(txt(plante.nom))}</h2>
+      <p class="sous">${t("sachet.recopie")}</p>
+      <img class="photo-preview" src="${photo.thumb}" alt="${t("sachet.apercu")}" />
       <div class="fgrid" style="margin-top:14px">
-        <div class="fchamp"><label for="s-variete">Variété</label>
-          <input id="s-variete" placeholder="Ex. Cœur de bœuf" /></div>
-        <div class="fchamp"><label for="s-semencier">Semencier</label>
-          <input id="s-semencier" placeholder="Ex. Kokopelli" /></div>
-        <div class="fchamp full"><label for="s-annee">Année / date limite de semis</label>
-          <input id="s-annee" placeholder="Ex. à semer avant 2029" /></div>
-        <div class="fchamp full"><label for="s-notes">Notes du sachet</label>
-          <textarea id="s-notes" placeholder="Profondeur, éclaircissage, conseils du semencier…"></textarea></div>
+        <div class="fchamp"><label for="s-variete">${t("sachet.variete")}</label>
+          <input id="s-variete" placeholder="${t("sachet.variete.placeholder")}" /></div>
+        <div class="fchamp"><label for="s-semencier">${t("sachet.semencier")}</label>
+          <input id="s-semencier" placeholder="${t("sachet.semencier.placeholder")}" /></div>
+        <div class="fchamp full"><label for="s-annee">${t("sachet.datelimite")}</label>
+          <input id="s-annee" placeholder="${t("sachet.datelimite.placeholder")}" /></div>
+        <div class="fchamp full"><label for="s-notes">${t("sachet.notes")}</label>
+          <textarea id="s-notes" placeholder="${t("sachet.notes.placeholder")}"></textarea></div>
         ${sansPhoto ? `<div class="fchamp inline full">
           <input id="s-illustrer" type="checkbox" checked />
-          <label for="s-illustrer">Utiliser cette photo pour illustrer la plante (identification)</label>
+          <label for="s-illustrer">${t("sachet.illustrer")}</label>
         </div>` : ""}
       </div>
       <div class="form-actions">
-        <button class="btn secondaire" id="s-retour">← Changer de plante</button>
-        <button class="btn" id="s-archiver">🌾 Archiver le sachet</button>
+        <button class="btn secondaire" id="s-retour">${t("sachet.changerplante")}</button>
+        <button class="btn" id="s-archiver">${t("sachet.archiver")}</button>
       </div>
     </div>`;
 
@@ -2180,9 +2256,7 @@ async function archiverSachet(plante) {
   try {
     await enregistrerSachet(sachet);
   } catch (e) {
-    ouvrirMessage("Archivage impossible",
-      "Le stockage local du navigateur a refusé l'enregistrement (espace saturé "
-      + "ou navigation privée). La photo n'a pas été conservée.");
+    ouvrirMessage(t("sachet.archimpossible.titre"), t("sachet.archimpossible.msg"));
     return;
   }
   state._photoEnCours = null;
@@ -2195,7 +2269,7 @@ async function archiverSachet(plante) {
 // Petites modales utilitaires (attente / message)
 function ouvrirAttente(texte) {
   $("#modale").innerHTML = `<div class="form-ajout"><h2>⏳ ${echapperHTML(texte)}</h2>
-    <p class="sous">Un instant…</p></div>`;
+    <p class="sous">${t("sachet.uninstant")}</p></div>`;
   $("#overlay").classList.add("ouvert");
   document.body.style.overflow = "hidden";
 }
@@ -2203,7 +2277,7 @@ function ouvrirMessage(titre, texte) {
   $("#modale").innerHTML = `<button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout"><h2>${echapperHTML(titre)}</h2>
     <p class="sous">${echapperHTML(texte)}</p>
-    <div class="form-actions"><button class="btn" id="msg-ok">Fermer</button></div></div>`;
+    <div class="form-actions"><button class="btn" id="msg-ok">${t("msg.fermer")}</button></div></div>`;
   $("#modale").querySelector(".fermer").addEventListener("click", fermerModale);
   $("#msg-ok").addEventListener("click", fermerModale);
   $("#overlay").classList.add("ouvert");
@@ -2217,7 +2291,7 @@ function ouvrirMessage(titre, texte) {
 const TAILLE_CASE_PX = 26;          // rendu d'une maille de 0,5 m
 
 function fmtM2(m2) {
-  return `${m2.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} m²`;
+  return `${m2.toLocaleString(localeCourante(), { maximumFractionDigits: 2 })} m²`;
 }
 
 function basculerPlan() {
@@ -2241,10 +2315,10 @@ function rendrePlan() {
   const surf = surfaceTotale();
   $("#plan-surface").textContent = fmtM2(surf);
   $("#plan-legende").innerHTML = `
-    <span><i class="lg-vide"></i> Planche libre</span>
-    <span><i class="lg-cult"></i> En culture</span>
-    <span><i class="lg-reco"></i> Récolte en cours</span>
-    <span>📐 1 carreau fin = 0,5 m · 1 carreau épais = 1 m</span>`;
+    <span><i class="lg-vide"></i> ${t("plan.legende.libre")}</span>
+    <span><i class="lg-cult"></i> ${t("plan.legende.culture")}</span>
+    <span><i class="lg-reco"></i> ${t("plan.legende.recolte")}</span>
+    <span>${t("plan.legende.echelle")}</span>`;
 
   // Le plan sert aussi de source pour la surface cultivable
   if (surf > 0 && !state.surface) {
@@ -2269,7 +2343,7 @@ function elementPlanche(p) {
     d.innerHTML = `<span class="pl-emoji">${plante.emoji}</span>
       ${petite ? "" : `<span>${echapperHTML(plante.nom)}</span>`}
       <span class="pl-surface">${fmtM2(surfacePlanche(p))}</span>
-      ${enRecolte ? `<span class="pl-alerte" title="Récolte en cours">🧺</span>` : ""}`;
+      ${enRecolte ? `<span class="pl-alerte" title="${t("planche.recolteencours")}">🧺</span>` : ""}`;
   } else {
     d.innerHTML = `<span class="pl-emoji">＋</span>
       <span class="pl-surface">${fmtM2(surfacePlanche(p))}</span>`;
@@ -2293,18 +2367,18 @@ function ouvrirModaleTailleJardin() {
   modale.innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout">
-      <h2>📐 Taille du jardin</h2>
-      <p class="sous">En mètres, par pas de ${MAILLE_M} m. Les planches déjà posées doivent tenir dans le nouveau plan.</p>
+      <h2>${t("plan.taillejardin.titre")}</h2>
+      <p class="sous">${t("plan.taillejardin.sous", { pas: MAILLE_M })}</p>
       <div class="fgrid">
-        <div class="fchamp"><label>Largeur (m)</label>
+        <div class="fchamp"><label>${t("plan.largeur")}</label>
           <input id="tj-largeur" type="number" min="${MAILLE_M}" step="${MAILLE_M}" value="${largeurActuelle}" /></div>
-        <div class="fchamp"><label>Longueur (m)</label>
+        <div class="fchamp"><label>${t("plan.longueur")}</label>
           <input id="tj-longueur" type="number" min="${MAILLE_M}" step="${MAILLE_M}" value="${longueurActuelle}" /></div>
       </div>
       <div class="form-erreur" id="tj-erreur" role="alert" hidden></div>
       <div class="form-actions">
-        <button class="btn secondaire" id="tj-annuler">Annuler</button>
-        <button class="btn" id="tj-appliquer">Appliquer</button>
+        <button class="btn secondaire" id="tj-annuler">${t("form.annuler")}</button>
+        <button class="btn" id="tj-appliquer">${t("plan.appliquer")}</button>
       </div>
     </div>`;
 
@@ -2371,8 +2445,8 @@ function installerDessinPlan() {
 
     actions = el("div", "plan-valider-actions");
     actions.innerHTML = `
-      <button type="button" class="annuler" aria-label="Annuler cette planche">✕</button>
-      <button type="button" class="valider" aria-label="Valider cette planche">✓</button>`;
+      <button type="button" class="annuler" aria-label="${t("plan.anneuler")}">✕</button>
+      <button type="button" class="valider" aria-label="${t("plan.valider")}">✓</button>`;
     g.appendChild(actions);
 
     const largeur = 2 * 44 + 8;
@@ -2386,8 +2460,7 @@ function installerDessinPlan() {
     actions.querySelector(".annuler").addEventListener("click", () => retirerApercu());
     actions.querySelector(".valider").addEventListener("click", () => {
       if (!placeLibre(rectAttente)) {
-        ouvrirMessage("Emplacement occupé", "Une planche se trouve déjà à cet endroit. "
-          + "Dessine ailleurs, ou supprime la planche existante.");
+        ouvrirMessage(t("plan.occupe.titre"), t("plan.occupe.msg"));
         return;
       }
       const nouvelle = creerPlanche(rectAttente.x, rectAttente.y, rectAttente.w, rectAttente.h);
@@ -2449,40 +2522,40 @@ function ouvrirModalePlanche(id) {
   const histHTML = hist.length
     ? `<ul class="conseils">${hist.map(h => {
         const pl = PLANTES.find(x => x.id === h.plantId);
-        return `<li>${h.annee} — ${echapperHTML(pl ? pl.nom : h.plantId)}
-          <span style="color:var(--texte-doux)">(${echapperHTML(h.famille || "?")})</span></li>`;
+        return `<li>${h.annee} — ${echapperHTML(pl ? txt(pl.nom) : h.plantId)}
+          <span style="color:var(--texte-doux)">(${echapperHTML(h.famille || t("planche.inconnue"))})</span></li>`;
       }).join("")}</ul>`
-    : `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Aucune culture précédente enregistrée.</p>`;
+    : `<p style="margin:0;font-size:14px;color:var(--texte-doux)">${t("planche.aucunhistorique")}</p>`;
 
   $("#modale").innerHTML = `
     <button class="fermer" aria-label="Fermer">×</button>
     <div class="form-ajout">
-      <h2>${plante ? plante.emoji + " " + echapperHTML(plante.nom) : "🟫 Planche libre"}</h2>
+      <h2>${plante ? plante.emoji + " " + echapperHTML(txt(plante.nom)) : t("planche.libre")}</h2>
       <p class="sous">${fmtM2(surfacePlanche(p))} · ${p.w * MAILLE_M} × ${p.h * MAILLE_M} m</p>
 
       ${plante ? `<div class="bloc">
-        <h4>🌱 Culture en place</h4>
-        <p style="margin:0">Semée / plantée le
+        <h4>${t("planche.cultureenplace")}</h4>
+        <p style="margin:0">${t("planche.semeele")}
           <strong>${p.dateSemis ? echapperHTML(fmtDateCourte(new Date(p.dateSemis))) : "—"}</strong>.</p>
         <p style="margin:6px 0 0;font-size:13.5px;color:var(--texte-doux)">
-          Famille : ${echapperHTML(plante.famille || "?")} ·
+          ${t("planche.famille", { famille: echapperHTML(plante.famille || t("planche.inconnue")) })}
           ${LIBELLE_ROTATION[typeRotation(plante)].emoji} ${LIBELLE_ROTATION[typeRotation(plante)].label}</p>
         <div class="form-actions">
-          <button class="btn" id="pl-recolte">🧺 Récolte terminée</button>
+          <button class="btn" id="pl-recolte">${t("planche.recolteterminee")}</button>
         </div>
       </div>` : `<div class="bloc">
-        <h4>🌱 Que cultiver ici ?</h4>
+        <h4>${t("planche.quecultiver")}</h4>
         ${blocRotationHTML(p)}
       </div>`}
 
       <div class="bloc">
-        <h4>📜 Historique de la planche</h4>
+        <h4>${t("planche.historique")}</h4>
         ${histHTML}
       </div>
 
       <div class="form-actions">
-        <button class="btn secondaire" id="pl-fermer">Fermer</button>
-        <button class="btn-danger" id="pl-suppr">🗑️ Supprimer la planche</button>
+        <button class="btn secondaire" id="pl-fermer">${t("planche.fermer")}</button>
+        <button class="btn-danger" id="pl-suppr">${t("planche.supprimer")}</button>
       </div>
     </div>`;
 
@@ -2520,31 +2593,33 @@ function blocRotationHTML(p) {
   const r = suggestionsRotation(p, PLANTES.filter(pl => adapteeZone(pl, state.zone)),
     { anneeCourante: dateDuJour().getFullYear(), estPlantable });
 
-  const cycle = CYCLE_ROTATION.map(t =>
-    `<span class="rc-etape ${t === r.typeSuivant ? "actif" : ""}">${LIBELLE_ROTATION[t].emoji} ${LIBELLE_ROTATION[t].label}</span>`
+  const cycle = CYCLE_ROTATION.map(typ =>
+    `<span class="rc-etape ${typ === r.typeSuivant ? "actif" : ""}">${LIBELLE_ROTATION[typ].emoji} ${LIBELLE_ROTATION[typ].label}</span>`
   ).join(" → ");
 
   const intro = r.dernier
-    ? `Après ${echapperHTML((PLANTES.find(x => x.id === r.dernier.plantId) || {}).nom || "la culture précédente")},
-       l'étape suivante du cycle est <strong>${LIBELLE_ROTATION[r.typeSuivant].label}</strong>.`
-    : `Planche neuve : on démarre par une <strong>légumineuse</strong>, qui enrichit le sol en azote.`;
+    ? t("rotation.apres", {
+        precedent: echapperHTML(txt((PLANTES.find(x => x.id === r.dernier.plantId) || {}).nom) || t("rotation.precedentedefaut")),
+        suivant: LIBELLE_ROTATION[r.typeSuivant].label,
+      })
+    : t("rotation.neuve");
 
   const liste = r.suggestions.map(s => `
     <button class="rot-item" data-rot="${echapperHTML(s.plante.id)}">
       <span style="font-size:20px">${s.plante.emoji}</span>
-      <span class="ri-nom">${echapperHTML(s.plante.nom)}
-        <span class="ri-pourquoi">${echapperHTML(s.raisons.join(" · ") || "compatible avec cette planche")}</span></span>
+      <span class="ri-nom">${echapperHTML(txt(s.plante.nom))}
+        <span class="ri-pourquoi">${echapperHTML(s.raisons.join(" · ") || t("rotation.compatible"))}</span></span>
       <span class="lg-chevron">›</span>
     </button>`).join("");
 
   const exclus = r.exclus.length
-    ? `<p style="margin:10px 0 4px;font-size:12.5px;font-weight:700;color:var(--texte-doux)">À éviter ici :</p>`
+    ? `<p style="margin:10px 0 4px;font-size:12.5px;font-weight:700;color:var(--texte-doux)">${t("rotation.aeviter")}</p>`
       + r.exclus.slice(0, 3).map(e =>
-        `<div class="rot-exclu">🚫 ${echapperHTML(e.plante.nom)} — ${echapperHTML(e.motif)}</div>`).join("")
+        `<div class="rot-exclu">🚫 ${echapperHTML(txt(e.plante.nom))} — ${echapperHTML(e.motif)}</div>`).join("")
     : "";
 
   return `<p style="margin:0 0 8px;font-size:14px">${intro}</p>
     <div class="rot-cycle">${cycle}</div>
-    ${liste || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">Aucune culture adaptée trouvée.</p>`}
+    ${liste || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">${t("rotation.aucune")}</p>`}
     ${exclus}`;
 }

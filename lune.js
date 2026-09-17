@@ -9,6 +9,9 @@
    Honnêteté : ces repères relèvent d'une tradition de jardinage (et, pour la
    biodynamie, d'une pratique non démontrée scientifiquement). Les calculs
    astronomiques, eux, sont exacts à la fraction de degré près.
+
+   Libellés bilingues : voir le commentaire en tête de data.js (fonction `bi`,
+   définie dans i18n.js, chargé avant ce fichier).
    ========================================================================= */
 
 const RAD = Math.PI / 180;
@@ -74,32 +77,36 @@ function ageLune(date) {
 }
 
 const PHASES = [
-  { max: 1.0,  nom: "Nouvelle lune",         emoji: "🌑" },
-  { max: 6.4,  nom: "Premier croissant",     emoji: "🌒" },
-  { max: 8.4,  nom: "Premier quartier",      emoji: "🌓" },
-  { max: 13.8, nom: "Gibbeuse croissante",   emoji: "🌔" },
-  { max: 15.8, nom: "Pleine lune",           emoji: "🌕" },
-  { max: 21.1, nom: "Gibbeuse décroissante", emoji: "🌖" },
-  { max: 23.1, nom: "Dernier quartier",      emoji: "🌗" },
-  { max: 28.5, nom: "Dernier croissant",     emoji: "🌘" },
-  { max: 30.0, nom: "Nouvelle lune",         emoji: "🌑" },
+  { max: 1.0,  nom: bi("Nouvelle lune", "New moon"),               emoji: "🌑" },
+  { max: 6.4,  nom: bi("Premier croissant", "Waxing crescent"),     emoji: "🌒" },
+  { max: 8.4,  nom: bi("Premier quartier", "First quarter"),        emoji: "🌓" },
+  { max: 13.8, nom: bi("Gibbeuse croissante", "Waxing gibbous"),    emoji: "🌔" },
+  { max: 15.8, nom: bi("Pleine lune", "Full moon"),                 emoji: "🌕" },
+  { max: 21.1, nom: bi("Gibbeuse décroissante", "Waning gibbous"),  emoji: "🌖" },
+  { max: 23.1, nom: bi("Dernier quartier", "Last quarter"),         emoji: "🌗" },
+  { max: 28.5, nom: bi("Dernier croissant", "Waning crescent"),     emoji: "🌘" },
+  { max: 30.0, nom: bi("Nouvelle lune", "New moon"),                emoji: "🌑" },
 ];
 
 // Constellations (sidéral) → élément → type de jour au jardin
 const CONSTELLATIONS = [
-  { nom: "Bélier",     type: "fruit"  }, { nom: "Taureau",    type: "racine" },
-  { nom: "Gémeaux",    type: "fleur"  }, { nom: "Cancer",     type: "feuille" },
-  { nom: "Lion",       type: "fruit"  }, { nom: "Vierge",     type: "racine" },
-  { nom: "Balance",    type: "fleur"  }, { nom: "Scorpion",   type: "feuille" },
-  { nom: "Sagittaire", type: "fruit"  }, { nom: "Capricorne", type: "racine" },
-  { nom: "Verseau",    type: "fleur"  }, { nom: "Poissons",   type: "feuille" },
+  { nom: bi("Bélier", "Aries"),       type: "fruit"  }, { nom: bi("Taureau", "Taurus"),      type: "racine" },
+  { nom: bi("Gémeaux", "Gemini"),     type: "fleur"  }, { nom: bi("Cancer", "Cancer"),       type: "feuille" },
+  { nom: bi("Lion", "Leo"),           type: "fruit"  }, { nom: bi("Vierge", "Virgo"),        type: "racine" },
+  { nom: bi("Balance", "Libra"),      type: "fleur"  }, { nom: bi("Scorpion", "Scorpio"),    type: "feuille" },
+  { nom: bi("Sagittaire", "Sagittarius"), type: "fruit"  }, { nom: bi("Capricorne", "Capricorn"), type: "racine" },
+  { nom: bi("Verseau", "Aquarius"),   type: "fleur"  }, { nom: bi("Poissons", "Pisces"),     type: "feuille" },
 ];
 
 const TYPES_JOUR = {
-  racine:  { label: "Jour RACINE",  pictoJour: "🥕", cible: "les légumes-racines (carotte, radis, pomme de terre, ail…)" },
-  feuille: { label: "Jour FEUILLE", pictoJour: "🥬", cible: "les légumes-feuilles et aromatiques (salade, épinard, basilic…)" },
-  fleur:   { label: "Jour FLEUR",   pictoJour: "🌸", cible: "les fleurs et les brocolis / choux-fleurs" },
-  fruit:   { label: "Jour FRUIT",   pictoJour: "🍅", cible: "les légumes-fruits et fruitiers (tomate, courgette, fraisier…)" },
+  racine:  { label: bi("Jour RACINE", "ROOT day"), pictoJour: "🥕",
+    cible: bi("les légumes-racines (carotte, radis, pomme de terre, ail…)", "root vegetables (carrot, radish, potato, garlic…)") },
+  feuille: { label: bi("Jour FEUILLE", "LEAF day"), pictoJour: "🥬",
+    cible: bi("les légumes-feuilles et aromatiques (salade, épinard, basilic…)", "leafy vegetables and herbs (lettuce, spinach, basil…)") },
+  fleur:   { label: bi("Jour FLEUR", "FLOWER day"), pictoJour: "🌸",
+    cible: bi("les fleurs et les brocolis / choux-fleurs", "flowers and broccoli / cauliflower") },
+  fruit:   { label: bi("Jour FRUIT", "FRUIT day"), pictoJour: "🍅",
+    cible: bi("les légumes-fruits et fruitiers (tomate, courgette, fraisier…)", "fruiting vegetables and fruit plants (tomato, zucchini, strawberry…)") },
 };
 
 // Ayanamsa (écart tropique → sidéral), ~24,2° pour notre époque
@@ -134,9 +141,14 @@ function infosLune(date = new Date()) {
     constellation: c.nom,
     typeJour: c.type,
     ...TYPES_JOUR[c.type],
-    conseil: montante
-      ? "Lune montante : la sève monte — favorable aux semis, greffes et récoltes de fruits."
-      : "Lune descendante : la sève redescend — favorable aux plantations, repiquages, tailles et travail du sol.",
+    conseil: bi(
+      montante
+        ? "Lune montante : la sève monte — favorable aux semis, greffes et récoltes de fruits."
+        : "Lune descendante : la sève redescend — favorable aux plantations, repiquages, tailles et travail du sol.",
+      montante
+        ? "Ascending moon: the sap rises — favorable for sowing, grafting and harvesting fruit."
+        : "Descending moon: the sap goes back down — favorable for planting, transplanting, pruning and soil work."
+    ),
   };
 }
 

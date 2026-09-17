@@ -14,6 +14,9 @@
      2. Cycle de fertilité : légumineuse → feuille → fruit → racine → …
         Les légumineuses fixent l'azote, les feuilles le consomment, les
         fruits sont gourmands, les racines terminent sur un sol appauvri.
+
+   Libellés bilingues : `t()` (chaînes d'interface fixes) et `bi()` (champs
+   éditoriaux type plante) sont définis dans i18n.js, chargé avant ce fichier.
    ========================================================================= */
 
 const MAILLE_M = 0.5;                       // côté d'une case, en mètres
@@ -27,10 +30,10 @@ const LS_PLAN = "permavore.plan";
 // Ordre du cycle de fertilité
 const CYCLE_ROTATION = ["legumineuse", "feuille", "fruit", "racine"];
 const LIBELLE_ROTATION = {
-  legumineuse: { label: "Légumineuse", emoji: "🫘", role: "fixe l'azote dans le sol" },
-  feuille:     { label: "Feuille",     emoji: "🥬", role: "consomme l'azote laissé par les légumineuses" },
-  fruit:       { label: "Fruit",       emoji: "🍅", role: "gourmand, profite d'un sol encore riche" },
-  racine:      { label: "Racine",      emoji: "🥕", role: "peu exigeant, termine le cycle" },
+  legumineuse: { label: bi("Légumineuse", "Legume"), emoji: "🫘", role: bi("fixe l'azote dans le sol", "fixes nitrogen in the soil") },
+  feuille:     { label: bi("Feuille", "Leaf"),     emoji: "🥬", role: bi("consomme l'azote laissé par les légumineuses", "uses up the nitrogen left by legumes") },
+  fruit:       { label: bi("Fruit", "Fruit"),       emoji: "🍅", role: bi("gourmand, profite d'un sol encore riche", "hungry, benefits from soil that's still rich") },
+  racine:      { label: bi("Racine", "Root"),      emoji: "🥕", role: bi("peu exigeant, termine le cycle", "undemanding, ends the cycle") },
 };
 
 /** Catégorie de rotation d'une plante (les fabacées priment). */
@@ -73,13 +76,11 @@ function redimensionnerJardin(cols, lignes) {
   cols = Math.round(cols); lignes = Math.round(lignes);
   if (!Number.isFinite(cols) || !Number.isFinite(lignes)
     || cols < GRILLE_MIN || lignes < GRILLE_MIN || cols > GRILLE_MAX || lignes > GRILLE_MAX) {
-    return { ok: false, motif: `Largeur et longueur doivent être entre ${GRILLE_MIN * MAILLE_M} `
-      + `et ${GRILLE_MAX * MAILLE_M} m.` };
+    return { ok: false, motif: t("plan.tailleinvalide", { min: GRILLE_MIN * MAILLE_M, max: GRILLE_MAX * MAILLE_M }) };
   }
   const deborde = jardin.planches.some(p => p.x + p.w > cols || p.y + p.h > lignes);
   if (deborde) {
-    return { ok: false, motif: "Une ou plusieurs planches existantes sortiraient du nouveau plan. "
-      + "Déplace ou supprime-les d'abord, ou choisis une taille plus grande." };
+    return { ok: false, motif: t("plan.deborde") };
   }
   jardin.cols = cols; jardin.lignes = lignes;
   sauverJardin();
@@ -169,7 +170,7 @@ function suggestionsRotation(planche, plantes, options = {}) {
 
   const resultats = plantes.map(plante => {
     if (plante.cycle === "vivace") return null;   // une vivace ne tourne pas
-    const t = typeRotation(plante);
+    const type = typeRotation(plante);
     const raisons = [];
     let score = 0;
 
@@ -177,26 +178,28 @@ function suggestionsRotation(planche, plantes, options = {}) {
     if (famillesRecentes.has(plante.famille)) {
       const ecart = famillesRecentes.get(plante.famille);
       return { plante, score: -100, deconseille: true,
-        motif: `${plante.famille} déjà cultivée ici il y a ${ecart === 0 ? "cette année" : ecart + " an(s)"}`
-             + " — attendre 3 ans", raisons };
+        motif: t("rotation.dejacultivee", {
+          famille: plante.famille,
+          ecart: ecart === 0 ? t("rotation.cetteannee") : t("rotation.ans", { n: ecart }),
+        }), raisons };
     }
 
     // 2. Respect du cycle de fertilité
-    if (t === typeSuivant) {
+    if (type === typeSuivant) {
       score += 50;
-      raisons.push(`${LIBELLE_ROTATION[t].emoji} ${LIBELLE_ROTATION[t].label} : ${LIBELLE_ROTATION[t].role}`);
-    } else if (dernier && t === dernier.type) {
+      raisons.push(`${LIBELLE_ROTATION[type].emoji} ${LIBELLE_ROTATION[type].label} : ${LIBELLE_ROTATION[type].role}`);
+    } else if (dernier && type === dernier.type) {
       score -= 20;
-      raisons.push("même catégorie que la culture précédente");
+      raisons.push(t("rotation.memecategorie"));
     }
 
     // 3. Une légumineuse après une gourmande restaure toujours le sol
-    if (t === "legumineuse" && dernier && dernier.type === "fruit") {
-      score += 15; raisons.push("restaure l'azote après une culture gourmande");
+    if (type === "legumineuse" && dernier && dernier.type === "fruit") {
+      score += 15; raisons.push(t("rotation.restaureazote"));
     }
 
     // 4. Plantable maintenant (saison + climat)
-    if (estPlantable(plante)) { score += 30; raisons.push("se sème ou se plante en ce moment"); }
+    if (estPlantable(plante)) { score += 30; raisons.push(t("rotation.plantablemaintenant")); }
     else score -= 25;
 
     // 5. Petit bonus aux cultures faciles
