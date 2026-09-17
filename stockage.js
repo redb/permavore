@@ -20,7 +20,7 @@
 */
 
 import {
-  SCHEMA_VERSION, clesMetier, etatDepuisBrut, migrer, comparerJardins,
+  SCHEMA_VERSION, clesMetier, clesObsoletes, etatDepuisBrut, migrer, comparerJardins,
 } from "./sauvegarde-core.mjs";
 
 const NOM_BASE = "permavore-jardin";
@@ -211,6 +211,71 @@ export async function journal(limite = 200) {
   return (Array.isArray(tout) ? tout : []).slice(-limite);
 }
 
+/* ---------- photos de sachets de graines ---------------------------------- */
+
+/*
+   Les sachets vivent dans leur propre base (`permavore-sachets`, écrite par
+   sachets.js). Ce sont des photos prises par le jardinier : irremplaçables, et
+   jusqu'ici absentes de l'export. Elles y entrent désormais.
+*/
+const BASE_SACHETS = "permavore-sachets";
+const STORE_SACHETS = "sachets";
+
+function ouvrirSachets() {
+  return new Promise((ok, ko) => {
+    if (typeof indexedDB === "undefined") return ko(new Error("indexeddb_absent"));
+    const req = indexedDB.open(BASE_SACHETS, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_SACHETS)) {
+        const st = db.createObjectStore(STORE_SACHETS, { keyPath: "id" });
+        st.createIndex("plantId", "plantId", { unique: false });
+      }
+    };
+    req.onsuccess = () => ok(req.result);
+    req.onerror = () => ko(req.error);
+  });
+}
+
+export async function lireSachets() {
+  try {
+    const db = await ouvrirSachets();
+    return await new Promise((ok, ko) => {
+      const tx = db.transaction(STORE_SACHETS, "readonly");
+      const req = tx.objectStore(STORE_SACHETS).getAll();
+      req.onsuccess = () => ok(Array.isArray(req.result) ? req.result : []);
+      tx.onerror = () => ko(tx.error);
+    });
+  } catch { return []; }
+}
+
+export async function ecrireSachets(liste) {
+  if (!Array.isArray(liste) || !liste.length) return 0;
+  try {
+    const db = await ouvrirSachets();
+    return await new Promise((ok, ko) => {
+      const tx = db.transaction(STORE_SACHETS, "readwrite");
+      const store = tx.objectStore(STORE_SACHETS);
+      let n = 0;
+      for (const s of liste) { if (s && s.id) { store.put(s); n++; } }
+      tx.oncomplete = () => ok(n);
+      tx.onerror = () => ko(tx.error);
+    });
+  } catch { return 0; }
+}
+
+export async function effacerSachetsPourTest() {
+  try {
+    const db = await ouvrirSachets();
+    await new Promise((ok, ko) => {
+      const tx = db.transaction(STORE_SACHETS, "readwrite");
+      tx.objectStore(STORE_SACHETS).clear();
+      tx.oncomplete = ok; tx.onerror = () => ko(tx.error);
+    });
+    return true;
+  } catch { return false; }
+}
+
 /* ---------- pont avec localStorage --------------------------------------- */
 
 export function lireLocalStorage() {
@@ -239,6 +304,10 @@ export function appliquerVersLocalStorage(etat) {
  *     (cas de la purge Safari ou d'un stockage effacé).
  */
 export async function initialiserStockage() {
+  // Purge des clés devenues inutiles. Ce sont des caches : rien à demander,
+  // rien à sauvegarder, et cela évite qu'un ancien format traîne des années.
+  for (const cle of clesObsoletes()) { try { localStorage.removeItem(cle); } catch { /* */ } }
+
   let durable;
   try { durable = await lireEtat(); }
   catch (e) { return { ok: false, raison: "indexeddb_indisponible", message: e && e.message }; }
@@ -285,6 +354,17 @@ export async function synchroniserCopieDurable() {
     await ecrireEtat(local);
     return true;
   } catch { return false; }
+}
+
+/**
+ * Ferme les connexions aux bases. Nécessaire pour qu'une suppression de base
+ * aboutisse : une connexion ouverte la bloque. Utile aussi quand un autre
+ * onglet doit reprendre la main sur une montée de version.
+ */
+export async function fermerBases() {
+  try { const db = await basePromesse; if (db) db.close(); } catch { /* déjà fermée */ }
+  basePromesse = null;
+  try { const db = await ouvrirSachets(); db.close(); } catch { /* absente */ }
 }
 
 /** Efface la copie durable — réservé aux tests de non-perte. */

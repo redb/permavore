@@ -34,6 +34,13 @@ function ouvrirDB() {
   });
 }
 
+/** Ferme la connexion : une base ne peut pas être supprimée tant qu'un onglet
+    la tient ouverte (suppression de compte, tests de non-perte, montée de version). */
+function fermerSachets() {
+  if (_db) { try { _db.close(); } catch { /* déjà fermée */ } _db = null; }
+}
+if (typeof window !== "undefined") window.fermerSachets = fermerSachets;
+
 function tx(mode) {
   return ouvrirDB().then(db => db.transaction(SACHETS_STORE, mode).objectStore(SACHETS_STORE));
 }

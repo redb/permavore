@@ -218,3 +218,86 @@ test("une culture mixte survit à l'export et à la restauration", () => {
   const cellules = new Set(occ.flatMap(o => o.cellules));
   assert.equal(cellules.size, 1, "une seule cellule physique");
 });
+
+/* ---------------------------------------------------------------------------
+   Migrations : le bug du schemaVersion lu comme 0 les relançait à chaque
+   démarrage. Ces tests garantissent qu'elles s'exécutent une fois et une seule.
+   --------------------------------------------------------------------------- */
+
+/** Faux magasin durable : reproduit le cycle démarrage → migration → écriture. */
+function magasinDurable(etatInitial) {
+  let contenu = JSON.parse(JSON.stringify(etatInitial));
+  const journalMigrations = [];
+  return {
+    lire: () => JSON.parse(JSON.stringify(contenu)),
+    demarrer() {
+      const avant = this.lire();
+      if ((avant.schemaVersion || 0) >= SCHEMA_VERSION) {
+        return { migrationsAppliquees: [], deja: true };
+      }
+      const r = migrer(avant);
+      if (!r.echec) { contenu = r.etat; journalMigrations.push(...r.migrationsAppliquees); }
+      return r;
+    },
+    journalMigrations,
+  };
+}
+
+test("une migration s'exécute exactement une fois, même après redémarrage", () => {
+  const depart = { schemaVersion: 0, donnees: etatDepuisBrut(jardinComplexe()).donnees };
+  const m = magasinDurable(depart);
+
+  const premier = m.demarrer();
+  assert.deepEqual(premier.migrationsAppliquees, [1], "appliquée au premier démarrage");
+  assert.equal(m.lire().schemaVersion, SCHEMA_VERSION);
+
+  // Redémarrages suivants : plus rien à faire. C'est précisément ce que le bug
+  // du schemaVersion cassait.
+  for (let i = 0; i < 5; i++) {
+    const suivant = m.demarrer();
+    assert.deepEqual(suivant.migrationsAppliquees, [], `redémarrage ${i + 2}`);
+  }
+  assert.deepEqual(m.journalMigrations, [1], "une seule exécution au total");
+});
+
+test("une migration conserve zones, cellules, occupations et instances", () => {
+  const brut = {
+    ...jardinComplexe(),
+    "permavore.occupations.v1": JSON.stringify([
+      { id: "o1", instanceCultureId: "i1", zoneId: "z1", cellules: ["3,4"], etat: "active", debut: "2026-09-01" },
+      { id: "o2", instanceCultureId: "i2", zoneId: "z1", cellules: ["3,4", "3,5"], etat: "active", debut: "2026-09-01" },
+    ]),
+  };
+  const depart = { schemaVersion: 0, donnees: etatDepuisBrut(brut).donnees };
+  const m = magasinDurable(depart);
+  m.demarrer();
+  const apres = m.lire();
+
+  assert.equal(apres.donnees["permavore.zones.v1"][0].environnement, "serre_froide");
+  assert.equal(apres.donnees["permavore.instances.v1"].length, 3);
+  const occ = apres.donnees["permavore.occupations.v1"];
+  assert.equal(occ.length, 2);
+  assert.deepEqual(occ[1].cellules, ["3,4", "3,5"], "les cellules sont intactes");
+  assert.equal(occ[0].instanceCultureId, "i1", "les liens vers les instances tiennent");
+});
+
+test("une migration est idempotente : la relancer ne change rien", () => {
+  const etat = { schemaVersion: 0, donnees: etatDepuisBrut(jardinComplexe()).donnees };
+  const une = migrer(etat);
+  const deux = migrer(une.etat);
+  assert.deepEqual(deux.migrationsAppliquees, []);
+  assert.deepEqual(comparerJardins(une.etat, deux.etat).differences, []);
+});
+
+test("les photos de sachets du jardinier entrent dans l'export", () => {
+  const etat = etatDepuisBrut(jardinComplexe());
+  const sachets = [
+    { id: "s1", plantId: "tomate", thumb: "data:image/jpeg;base64,AAAA", meta: { date: "2026-03-01" } },
+    { id: "s2", plantId: "radis", thumb: "data:image/jpeg;base64,BBBB", meta: {} },
+  ];
+  const fichier = construireExport(etat, { sachets });
+  assert.equal(fichier.sachets.length, 2);
+  assert.equal(fichier.sachets[0].plantId, "tomate");
+  // Et le cache climatique n'y entre jamais, même s'il traîne encore en local.
+  assert.equal(JSON.stringify(fichier).includes("cacheClimat"), false);
+});

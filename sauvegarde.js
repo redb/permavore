@@ -14,7 +14,7 @@ import {
 import {
   initialiserStockage, lireLocalStorage, appliquerVersLocalStorage, ecrireEtat,
   sauvegardeSecurite, restaurerSauvegarde, sauvegardes, synchroniserCopieDurable,
-  journal,
+  journal, lireSachets, ecrireSachets,
 } from "./stockage.js";
 
 const etatStockage = { pret: false, resultat: null };
@@ -40,9 +40,10 @@ function messageEtat() {
 export async function exporterJardin() {
   const etat = lireLocalStorage();
   const entrees = await journal(500).catch(() => []);
+  const sachets = await lireSachets().catch(() => []);
   const fichier = construireExport(etat, {
     appVersion: document.documentElement.dataset.version || null,
-    journal: entrees,
+    journal: entrees, sachets,
   });
   const texte = JSON.stringify(fichier, null, 2);
   const blob = new Blob([texte], { type: "application/json;charset=utf-8" });
@@ -79,6 +80,10 @@ export async function restaurerJardin(fichier, confirmer) {
   try {
     appliquerVersLocalStorage(cible);
     await ecrireEtat(cible).catch(() => null);
+    // Photos de sachets : restaurées aussi, sinon le jardinier perd ses clichés.
+    if (Array.isArray(fichier.sachets) && fichier.sachets.length) {
+      await ecrireSachets(fichier.sachets).catch(() => 0);
+    }
   } catch (e) {
     await rembobiner(avant, idFilet);
     return { ok: false, etape: "ecriture", message: e && e.message };
@@ -183,7 +188,7 @@ export function ouvrirPanneauSauvegarde() {
   p.querySelector("#sauv-exporter").addEventListener("click", async () => {
     try {
       const r = await exporterJardin();
-      message.textContent = tr("sauv.exporte", { n: r.instances, ko: Math.max(1, Math.round(r.octets / 1024)) });
+  message.textContent = tr("sauv.exporte", { n: r.instances, ko: Math.max(1, Math.round(r.octets / 1024)) });
     } catch (e) {
       message.textContent = tr("sauv.echecExport");
     }

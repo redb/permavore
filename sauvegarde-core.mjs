@@ -38,12 +38,18 @@ export const CLES_JARDIN = {
   // Confort local : reconstructible, donc jamais exporté ni restauré.
   "permavore.lang":         { nom: "langue",       metier: false },
   "permavore.photos.v1":    { nom: "cachePhotos",  metier: false },
-  "permavore.climat.v2":    { nom: "cacheClimat",  metier: false },
+  // Reliquat : le cache climatique vit désormais dans IndexedDB (magasin
+  // « climat »). La clé reste listée pour être purgée, jamais exportée.
+  "permavore.climat.v2":    { nom: "cacheClimatObsolete", metier: false, obsolete: true },
   "permavore.enraciner.vu": { nom: "aideVue",      metier: false },
 };
 
 export const clesMetier = () =>
   Object.entries(CLES_JARDIN).filter(([, v]) => v.metier).map(([k]) => k);
+
+/** Clés devenues inutiles, à purger sans rien demander : ce sont des caches. */
+export const clesObsoletes = () =>
+  Object.entries(CLES_JARDIN).filter(([, v]) => v.obsolete).map(([k]) => k);
 
 const analyser = (brut) => {
   if (brut === null || brut === undefined) return undefined;
@@ -156,7 +162,8 @@ export function construireExport(etat, meta = {}) {
     ressources: bloc("permavore.ressources"),
     demandesGraines: bloc("permavore.seedRequests.v1"),
     journal: Array.isArray(meta.journal) ? meta.journal : [],
-    photosSachets: Array.isArray(meta.photosSachets) ? meta.photosSachets : [],
+    // Photos prises par le jardinier : irremplaçables, donc exportées.
+    sachets: Array.isArray(meta.sachets) ? meta.sachets : [],
   };
 }
 
