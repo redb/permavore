@@ -19,6 +19,13 @@
 
 const LS_INSTANCES = "permavore.instances.v1";
 const LS_ZONES = "permavore.zones.v1";
+const LS_OCCUPATIONS = "permavore.occupations.v1";
+
+// Côté d'une cellule du plan, en mètres. 0,5 m de côté = 0,25 m², la plus
+// petite surface qu'un jardinier occupe réellement : un carré de radis, une
+// touffe de ciboulette, quelques pieds de persil.
+const COTE_CELLULE_M = 0.5;
+const M2_PAR_CELLULE = COTE_CELLULE_M * COTE_CELLULE_M;
 
 // États d'une instance. L'ordre est celui du cycle de vie.
 const ETATS_INSTANCE = ["prevu", "seme", "plante", "dejaPresent", "termine"];
@@ -40,12 +47,162 @@ let INSTANCES = [];
 */
 let ZONES_JARDIN = [];
 
+/*
+   Une cellule peut porter PLUSIEURS cultures en même temps :
+
+       Cellule  →  0..N Occupations  →  InstanceCulture
+
+   Un carré de 0,25 m² peut très bien contenir radis, carottes et poireaux
+   ensemble — c'est la pratique courante, pas une exception. Le modèle ne
+   suppose donc jamais qu'une cellule appartient à une seule culture.
+
+   Conséquence importante sur les surfaces : trois cultures sur une même
+   cellule n'occupent pas 0,75 m², elles occupent 0,25 m². Les surfaces se
+   calculent sur l'UNION des cellules, jamais par addition des occupations.
+*/
+let OCCUPATIONS = [];
+
 function chargerInstances() {
   try {
     const brut = JSON.parse(localStorage.getItem(LS_INSTANCES) || "[]");
     INSTANCES = Array.isArray(brut) ? brut.filter(i => i && i.cultureId) : [];
   } catch { INSTANCES = []; }
   return INSTANCES;
+}
+
+function chargerOccupations() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(LS_OCCUPATIONS) || "[]");
+    OCCUPATIONS = Array.isArray(brut) ? brut.filter(o => o && o.id) : [];
+  } catch { OCCUPATIONS = []; }
+  return OCCUPATIONS;
+}
+
+function sauverOccupations() {
+  try { localStorage.setItem(LS_OCCUPATIONS, JSON.stringify(OCCUPATIONS)); }
+  catch { /* stockage refusé */ }
+}
+
+/** Identifiant d'une cellule du plan. */
+const cellule = (x, y) => `${Math.round(x)},${Math.round(y)}`;
+
+/**
+ * Occupe une ou plusieurs cellules avec une culture enracinée. Ne déplace ni
+ * ne supprime aucune occupation existante : plusieurs cultures cohabitent.
+ */
+function occuper(instanceCultureId, cellules, options = {}) {
+  const liste = (Array.isArray(cellules) ? cellules : [cellules])
+    .map(c => (typeof c === "string" ? c : cellule(c.x, c.y)))
+    .filter(Boolean);
+  if (!instanceCultureId || !liste.length) return null;
+  const o = {
+    id: nouvelIdentifiant().replace("inst_", "occ_"),
+    instanceCultureId,
+    zoneId: options.zoneId || null,
+    cellules: [...new Set(liste)],
+    debut: options.debut || new Date().toISOString().slice(0, 10),
+    fin: null,
+    etat: "active",
+    cree: new Date().toISOString(),
+    maj: new Date().toISOString(),
+  };
+  OCCUPATIONS.push(o);
+  sauverOccupations();
+  return o;
+}
+
+/**
+ * Récolte ou fin de culture : l'occupation devient terminée et libère ses
+ * cellules, mais elle n'est PAS supprimée — l'historique d'une planche est ce
+ * qui permettra de proposer la culture suivante.
+ */
+function terminerOccupation(id, fin) {
+  const o = OCCUPATIONS.find(x => x.id === id);
+  if (!o) return null;
+  o.etat = "terminee";
+  o.fin = fin || new Date().toISOString().slice(0, 10);
+  o.maj = new Date().toISOString();
+  sauverOccupations();
+  return o;
+}
+
+function supprimerOccupation(id) {
+  const i = OCCUPATIONS.findIndex(x => x.id === id);
+  if (i < 0) return false;
+  OCCUPATIONS.splice(i, 1);
+  sauverOccupations();
+  return true;
+}
+
+/** Occupations actives d'une cellule — souvent plusieurs. */
+function occupationsDe(x, y) {
+  const c = typeof x === "string" ? x : cellule(x, y);
+  return OCCUPATIONS.filter(o => o.etat === "active" && o.cellules.includes(c));
+}
+
+/** Historique d'une cellule, terminées comprises, de la plus ancienne à la plus récente. */
+function historiqueCellule(x, y) {
+  const c = typeof x === "string" ? x : cellule(x, y);
+  return OCCUPATIONS.filter(o => o.cellules.includes(c))
+    .sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
+}
+
+const occupationsActives = () => OCCUPATIONS.filter(o => o.etat === "active");
+
+/**
+ * Surface physiquement occupée, en m². On compte l'UNION des cellules : trois
+ * cultures sur la même cellule occupent 0,25 m², pas 0,75 m².
+ */
+function surfacePhysique(occupations) {
+  const liste = occupations || occupationsActives();
+  const cellules = new Set();
+  for (const o of liste) for (const c of o.cellules) cellules.add(c);
+  return Math.round(cellules.size * M2_PAR_CELLULE * 100) / 100;
+}
+
+/** Surface d'une occupation, toujours dérivée de ses cellules. */
+const surfaceOccupation = (o) =>
+  Math.round((o?.cellules?.length || 0) * M2_PAR_CELLULE * 100) / 100;
+
+/** Une cellule est libre quand plus aucune occupation active ne la porte. */
+const celluleLibre = (x, y) => occupationsDe(x, y).length === 0;
+
+/**
+ * Reprise des anciennes planches rectangulaires du plan.
+ *
+ * Une planche est un rectangle de cellules : la conversion est donc exacte,
+ * sans rien inventer. On ne convertit QUE les planches portant une culture, et
+ * on ne touche jamais aux planches d'origine — elles restent lisibles, et la
+ * reprise est idempotente : la relancer ne crée pas de doublon.
+ */
+function migrerPlanchesVersOccupations(planches, options = {}) {
+  if (!Array.isArray(planches)) return { reprises: 0, ignorees: 0 };
+  let reprises = 0, ignorees = 0;
+  for (const p of planches) {
+    if (!p || !p.plantId) { ignorees++; continue; }
+    const marque = `planche:${p.id}`;
+    if (OCCUPATIONS.some(o => o.origine === marque)) { ignorees++; continue; }
+
+    const cellules = [];
+    for (let dx = 0; dx < (p.w || 1); dx++) {
+      for (let dy = 0; dy < (p.h || 1); dy++) cellules.push(cellule(p.x + dx, p.y + dy));
+    }
+    // Rattacher à une instance existante de cette culture, sinon en créer une :
+    // la planche affirme que la culture est en place, on ne perd pas cette
+    // information sous prétexte qu'aucune instance n'existait avant.
+    let inst = INSTANCES.find(i => i.cultureId === p.plantId && i.etat !== "termine");
+    if (!inst) {
+      inst = enraciner(p.plantId, {
+        etat: "plante",
+        depuis: p.dateSemis ? { precision: "exacte", valeur: p.dateSemis } : { precision: "inconnue" },
+        zoneId: options.zoneId || null,
+      });
+    }
+    const o = occuper(inst.id, cellules, { zoneId: options.zoneId || null, debut: p.dateSemis || null });
+    if (o) { o.origine = marque; reprises++; }
+  }
+  if (reprises) sauverOccupations();
+  return { reprises, ignorees };
 }
 
 function chargerZones() {
@@ -203,12 +360,18 @@ function migrerAdoptees(adoptees, dates) {
 
 chargerInstances();
 chargerZones();
+chargerOccupations();
 
 if (typeof window !== "undefined") {
   window.Instances = {
     enraciner, majInstance, deraciner, instancesDe, estEnracinee,
     culturesEnracinees, migrerAdoptees, charger: chargerInstances,
     definirZone, zone, zones: () => [...ZONES_JARDIN], environnementDe,
+    occuper, terminerOccupation, supprimerOccupation, occupationsDe,
+    historiqueCellule, occupationsActives, occupations: () => [...OCCUPATIONS],
+    surfacePhysique, surfaceOccupation, celluleLibre, cellule,
+    migrerPlanchesVersOccupations,
+    M2_PAR_CELLULE, COTE_CELLULE_M,
     ETATS: ETATS_INSTANCE, PRECISIONS: PRECISIONS_DATE,
   };
 }

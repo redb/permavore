@@ -185,3 +185,36 @@ test("un conflit ne fait jamais gagner le serveur aveuglément", () => {
   const memeDate = { id: "i1", updatedAt: local.updatedAt };
   assert.equal(p.resoudreConflit(local, memeDate).choix, "conserver_les_deux");
 });
+
+test("une culture mixte survit à l'export et à la restauration", () => {
+  // Une seule cellule, trois cultures, dont une déjà récoltée.
+  const brut = {
+    "permavore.instances.v1": JSON.stringify([
+      { id: "i-radis", cultureId: "radis", etat: "seme", zoneId: "z1" },
+      { id: "i-carotte", cultureId: "carotte", etat: "seme", zoneId: "z1" },
+      { id: "i-poireau", cultureId: "poireau", etat: "plante", zoneId: "z1" },
+    ]),
+    "permavore.zones.v1": JSON.stringify([{ id: "z1", nom: "Planche", environnement: "pleine_terre" }]),
+    "permavore.occupations.v1": JSON.stringify([
+      { id: "o1", instanceCultureId: "i-radis", zoneId: "z1", cellules: ["3,4"],
+        debut: "2026-09-01", fin: "2026-10-15", etat: "terminee" },
+      { id: "o2", instanceCultureId: "i-carotte", zoneId: "z1", cellules: ["3,4"],
+        debut: "2026-09-01", fin: null, etat: "active" },
+      { id: "o3", instanceCultureId: "i-poireau", zoneId: "z1", cellules: ["3,4"],
+        debut: "2026-09-01", fin: null, etat: "active" },
+    ]),
+  };
+  const avant = etatDepuisBrut(brut);
+  const fichier = JSON.parse(JSON.stringify(construireExport(avant)));
+  assert.equal(fichier.occupations.length, 3);
+
+  const apres = etatDepuisExport(fichier);
+  assert.equal(comparerJardins(avant, apres).identique, true);
+
+  const occ = apres.donnees["permavore.occupations.v1"];
+  const actives = occ.filter(o => o.etat === "active");
+  assert.equal(actives.length, 2, "carotte et poireau restent actifs");
+  assert.equal(occ.find(o => o.id === "o1").fin, "2026-10-15", "l'historique du radis est conservé");
+  const cellules = new Set(occ.flatMap(o => o.cellules));
+  assert.equal(cellules.size, 1, "une seule cellule physique");
+});

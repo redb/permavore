@@ -27,6 +27,7 @@ export const FORMAT_VERSION = 1;
 export const CLES_JARDIN = {
   "permavore.instances.v1":    { nom: "instances",   metier: true,  type: "array" },
   "permavore.zones.v1":        { nom: "zones",       metier: true,  type: "array" },
+  "permavore.occupations.v1":  { nom: "occupations", metier: true,  type: "array" },
   "permavore.plan":            { nom: "plan",        metier: true,  type: "object" },
   "permavore.plantes":         { nom: "cultures",    metier: true,  type: "array" },
   "permavore.ressources":      { nom: "ressources",  metier: true,  type: "any" },
@@ -149,6 +150,7 @@ export function construireExport(etat, meta = {}) {
     cultures: bloc("permavore.plantes"),
     instances: bloc("permavore.instances.v1"),
     zones: bloc("permavore.zones.v1"),
+    occupations: bloc("permavore.occupations.v1"),
     dates: bloc("permavore.dates.v1"),
     adoptees: bloc("permavore.adoptees"),
     ressources: bloc("permavore.ressources"),
@@ -167,6 +169,7 @@ export function etatDepuisExport(fichier) {
   poser("permavore.plantes", fichier?.cultures);
   poser("permavore.instances.v1", fichier?.instances);
   poser("permavore.zones.v1", fichier?.zones);
+  poser("permavore.occupations.v1", fichier?.occupations);
   poser("permavore.dates.v1", fichier?.dates);
   poser("permavore.adoptees", fichier?.adoptees);
   poser("permavore.ressources", fichier?.ressources);
@@ -200,6 +203,7 @@ export function validerExport(fichier) {
   };
   estTableau(fichier.instances, "instances");
   estTableau(fichier.zones, "zones");
+  estTableau(fichier.occupations, "occupations");
   estTableau(fichier.cultures, "cultures");
 
   if (Array.isArray(fichier.instances)) {
@@ -210,6 +214,7 @@ export function validerExport(fichier) {
   const resume = {
     instances: tableau(fichier.instances).length,
     zones: tableau(fichier.zones).length,
+    occupations: tableau(fichier.occupations).length,
     cultures: tableau(fichier.cultures).length,
     ressources: fichier.ressources ? "présentes" : "absentes",
     plan: fichier.garden?.plan ? "présent" : "absent",

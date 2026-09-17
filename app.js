@@ -51,6 +51,14 @@ function estAdoptee(id) { return state.adoptees.has(id); }
 function initialiserInstances() {
   if (typeof window === "undefined" || !window.Instances) return;
   migrerVersInstances();
+  // Reprise des anciennes planches du plan vers le modèle par cellules. Non
+  // destructive et idempotente : les planches restent lisibles telles quelles.
+  try {
+    const plan = JSON.parse(localStorage.getItem("permavore.plan") || "null");
+    if (plan && Array.isArray(plan.planches) && plan.planches.length) {
+      window.Instances.migrerPlanchesVersOccupations(plan.planches);
+    }
+  } catch { /* plan illisible : on n'y touche pas */ }
   synchroniserDepuisInstances();
 }
 

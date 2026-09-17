@@ -27,23 +27,48 @@ export function fenetres(aujourdhui = new Date()) {
   const annee = aujourdhui.getUTCFullYear();
   const debutFutur = annee + 5;
   return {
-    reference: { debut: annee - 30, fin: annee - 1 },   // 30 ans : normale climatique
-    observee:  { debut: annee - 20, fin: annee - 1 },   // climat récemment vécu
+    // La fenêtre de référence des modèles est la MÊME que celle des
+    // observations : c'est ce qui rend la méthode « delta » valide, puisque le
+    // biais propre au modèle s'annule entre deux fenêtres identiques. Cela
+    // divise aussi d'un tiers le volume téléchargé, ce qui compte : trois
+    // séries de trente ans en parallèle faisaient échouer la fonction sur les
+    // points où la source répond lentement.
+    reference: { debut: annee - 20, fin: annee - 1 },
+    observee:  { debut: annee - 20, fin: annee - 1 },
     futur:     { debut: debutFutur, fin: debutFutur + 9 },
   };
 }
 
 const grille = (v) => Math.round(v * 10) / 10;
 
-async function json(url) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  try {
-    const r = await fetch(url, { signal: ctrl.signal, cf: { cacheTtl: CACHE_S } });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d && d.daily ? d : null;
-  } catch { return null; } finally { clearTimeout(t); }
+// Diagnostic renvoyé en cas d'échec : sans lui, « source indisponible » ne dit
+// pas si la source a refusé, expiré ou renvoyé une charge inattendue.
+const dernierEchec = { statut: null, message: null, urlType: null };
+
+async function json(url, essais = 2, type = "?") {
+  for (let i = 0; i < essais; i++) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+      const r = await fetch(url, { signal: ctrl.signal, cf: { cacheTtl: CACHE_S } });
+      if (r.ok) {
+        const d = await r.json();
+        if (d && d.daily) return d;
+        dernierEchec.statut = 200;
+        dernierEchec.message = d && d.reason ? String(d.reason).slice(0, 200) : "charge_inattendue";
+      } else {
+        dernierEchec.statut = r.status;
+        dernierEchec.message = (await r.text().catch(() => "")).slice(0, 200);
+      }
+      dernierEchec.urlType = type;
+    } catch (e) {
+      dernierEchec.statut = 0;
+      dernierEchec.message = (e && e.name === "AbortError") ? "delai_depasse" : String(e && e.message).slice(0, 200);
+      dernierEchec.urlType = type;
+    }
+    finally { clearTimeout(t); }
+  }
+  return null;
 }
 
 const serieArchive = (d) => ({
@@ -78,17 +103,26 @@ export async function onRequestGet({ request }) {
     daily: "temperature_2m_min,temperature_2m_max,precipitation_sum",
   };
 
-  const [obs, ref, fut] = await Promise.all([
-    json(q(ARCHIVE, { latitude: String(la), longitude: String(lo),
-      start_date: `${f.observee.debut}-01-01`, end_date: `${f.observee.fin}-12-31`,
-      daily: "temperature_2m_min,temperature_2m_max,precipitation_sum", timezone: "UTC" })),
-    json(q(CLIMAT, { ...communModele,
-      start_date: `${f.reference.debut}-01-01`, end_date: `${f.reference.fin}-12-31` })),
-    json(q(CLIMAT, { ...communModele,
-      start_date: `${f.futur.debut}-01-01`, end_date: `${f.futur.fin}-12-31` })),
-  ]);
+  // Séquentiel et non parallèle : chaque série pèse plusieurs dizaines de
+  // méga-octets une fois analysée, et les charger toutes ensemble faisait
+  // échouer la fonction là où la source répond lentement (Brest, Melbourne).
+  const obs = await json(q(ARCHIVE, { latitude: String(la), longitude: String(lo),
+    start_date: `${f.observee.debut}-01-01`, end_date: `${f.observee.fin}-12-31`,
+    daily: "temperature_2m_min,temperature_2m_max,precipitation_sum", timezone: "UTC" }), 2, "archive");
+  if (!obs) {
+    // Une limite de débit n'est pas une panne : elle se réessaie. On le
+    // distingue pour que le client patiente au lieu de conclure à un échec.
+    if (dernierEchec.statut === 429) {
+      return Response.json({ erreur: "limite_debit", diagnostic: dernierEchec },
+        { status: 429, headers: { "Retry-After": "60" } });
+    }
+    return Response.json({ erreur: "source_indisponible", diagnostic: dernierEchec }, { status: 503 });
+  }
 
-  if (!obs) return Response.json({ erreur: "source_indisponible" }, { status: 503 });
+  const ref = await json(q(CLIMAT, { ...communModele,
+    start_date: `${f.reference.debut}-01-01`, end_date: `${f.reference.fin}-12-31` }));
+  const fut = ref ? await json(q(CLIMAT, { ...communModele,
+    start_date: `${f.futur.debut}-01-01`, end_date: `${f.futur.fin}-12-31` })) : null;
 
   const serieObs = serieArchive(obs);
   const profil = profilClimatique(serieObs, la);
@@ -147,6 +181,9 @@ export async function onRequestGet({ request }) {
       scenario: projection ? "au plus proche de RCP 8.5" : null,
       periodeObservee: `${f.observee.debut}-${f.observee.fin}`,
       periodeReferenceModeles: projection ? `${f.reference.debut}-${f.reference.fin}` : null,
+      note: projection
+        ? "La fenêtre de référence des modèles est la même que celle des observations, afin que le biais propre au modèle s'annule dans l'écart."
+        : null,
       periodeFuture: projection ? `${f.futur.debut}-${f.futur.fin}` : null,
       methodeProjection: projection
         ? "delta entre deux fenêtres du même modèle, appliqué au profil observé"
