@@ -2,7 +2,19 @@
 
 Sélecteur de cultures pour **jardin nourricier**. On saisit sa ville (ou on se
 géolocalise) et la surface du jardin ; le site propose les fruits, légumes et
-aromatiques adaptés au climat, en mettant en avant ceux **à planter ce mois-ci**.
+aromatiques adaptés au climat, en mettant en avant celles **à planter ce mois-ci**.
+
+## Parcours
+
+Permavore répond d'abord à une question : **« Qu'est-ce que je peux planter chez moi
+maintenant ? »** L'écran d'entrée ne demande que la commune (ou « Me localiser ») et
+une surface approximative ; le climat est déduit automatiquement. Les résultats
+mettent en avant **À planter maintenant**, puis **Bientôt** et **Autres cultures
+adaptées**. Les outils (recherche, filtres, Mon potager, ressources, ajout, photo de
+sachet, identification, plan) arrivent ensuite, repliés ou quand ils deviennent utiles.
+
+Détails, règles d'estimation et architecture cible (météo, placement, succession) :
+[`docs/architecture-recommandation.md`](docs/architecture-recommandation.md).
 
 ## Fonctionnalités
 

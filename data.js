@@ -239,6 +239,12 @@ const RESSOURCES_CATALOGUE = {
 // --- Base plantes ---
 // semis : liste de fenêtres [moisDebut, moisFin] (semis OU plantation en pleine terre)
 // frileux : true => sensible au gel, exclue de la zone montagne
+// --- Cultures, pas variétés -----------------------------------------------------
+// Chaque entrée de PLANTES est une CULTURE (espèce cultivée : « Tomate »,
+// « Pomme de terre »), jamais une variété. Les variétés (cultivars : « Rose de
+// Berne », « Charlotte ») se rattacheront à leur culture par `cultureId`, dans un
+// catalogue distinct — c'est déjà le cas pour la tomate dans network-data.js.
+// Objectif à terme : recommander des variétés adaptées localement.
 const PLANTES = [
   { id:"tomate", nom:bi("Tomate","Tomato"), latin:"Solanum lycopersicum", cat:"legume", typeLunaire:"fruit", famille:"Solanacées", emoji:"🍅", photo:"https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Tomato_je.jpg/960px-Tomato_je.jpg",
     cycle:"annuelle", diff:2, encombrement:"moyen", soleil:"plein", densite:2.5, espacement:bi("50 cm","20 in"),
@@ -652,3 +658,25 @@ const PLANTES = [
       bi("Chaleur (20–25 °C) et atmosphère humide indispensables.","Warmth (68–77°F / 20–25°C) and humidity are essential."),
       bi("Récolter quand le feuillage jaunit à l'automne.","Harvest when the foliage yellows in fall.")] },
 ];
+
+// --- Atouts « jardin nourricier » ------------------------------------------------
+// Deux sources, jamais mélangées à l'affichage :
+//  • déduits des fiches (fiables) : FACILE (diff 1), VIVACE (cycle), RAPIDE
+//    (délai de récolte court quand la fiche permet de l'estimer) → calculés dans app.js ;
+//  • classement éditorial QUALITATIF ci-dessous : repères courants du jardinage
+//    vivrier, sans aucune valeur chiffrée. Affichés comme des estimations.
+//    À sourcer avant de les transformer en données numériques.
+const ATOUTS_EDITORIAUX = {
+  // Beaucoup d'énergie ou de protéines pour la surface occupée (cultures de base)
+  nourrissant:  ["pomme-de-terre", "patate-douce", "courge", "feve", "petit-pois"],
+  // Récolte abondante au m² sur la saison
+  productif:    ["courgette", "tomate", "blette", "concombre", "pomme-de-terre", "haricot"],
+  // Se stocke plusieurs mois sans transformation (cave, grenier, tresses)
+  conservation: ["pomme-de-terre", "courge", "oignon", "ail", "carotte", "betterave", "patate-douce"],
+};
+
+// Rendement au m² : VOLONTAIREMENT VIDE tant qu'aucune valeur n'est sourcée.
+// Une carte n'affiche un rendement que si une entrée existe ici.
+// Format : { tomate: { min: 4, max: 8, unite: "kg/m²", source: "Référence, année" } }
+const RENDEMENTS_SOURCES = {};
+

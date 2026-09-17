@@ -50,9 +50,9 @@
       <div class="marque"><img class="logo-marque" src="/icons/logo.png" alt="" width="30" height="30" /><img id="hero-marque" class="wordmark" src="/icons/wordmark-permavore.png" alt="Permavore" width="739" height="124" /></div>
       <div class="lang-switch" id="lang-switch" role="group" aria-label="Langue / Language"></div>
     </div>
-    <h1 id="hero-titre">Le potager fait pour ton jardin</h1>
-    <p id="hero-intro">Indique ta ville et la surface disponible : on te propose les fruits et légumes adaptés, en mettant en avant ceux à <strong>planter maintenant</strong>.</p>
-    <div class="date-jour" id="date-jour">📅 …</div>
+    <h1 id="hero-titre">Que planter chez toi ?</h1>
+    <p id="hero-intro">Indique où se trouve ton jardin pour découvrir ce que tu peux planter maintenant.</p>
+    <div class="date-jour" id="date-jour" hidden>📅 …</div>
   </header>
 
   <div class="barre-compacte" id="barre-compacte" hidden>
@@ -62,55 +62,125 @@
   </div>
 
   <section class="panneau">
-    <div class="panneau-inner">
-      <div class="reglages">
-        <div class="champ champ-ville">
-          <label for="ville" id="label-ville">📍 Ta ville</label>
-          <input id="ville" type="text" placeholder="Ex. Rumilly, Nantes, Lyon…"
+    <form class="panneau-inner entree" id="form-entree" novalidate>
+      <div class="champ champ-ville">
+        <label for="ville" id="label-ville">📍 Où est ton jardin ?</label>
+        <div class="ville-ligne">
+          <input id="ville" type="text" placeholder="Ta commune" enterkeyhint="go"
                  autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" />
-          <div class="ac" id="ac" hidden></div>
+          <button type="button" class="btn geo" id="btn-geo" title="Me localiser">📡 Me localiser</button>
         </div>
-        <div class="champ">
-          <label for="surface" id="label-surface">📐 Surface du jardin (m²)</label>
-          <input id="surface" type="number" min="1" max="10000" placeholder="Ex. 20" />
+        <div class="ac" id="ac" hidden></div>
+        <p class="champ-erreur" id="erreur-ville" role="alert" hidden></p>
+        <p class="climat-detecte" id="climat-detecte" hidden></p>
+      </div>
+
+      <div class="champ">
+        <span class="champ-label" id="label-surface">📐 Surface cultivable, environ</span>
+        <div class="surface-choix" id="surface-choix" role="group" aria-labelledby="label-surface">
+          <button type="button" data-surface="4"><strong data-i18n="surface.balcon">Balcon</strong><small data-i18n="surface.balcon.detail">moins de 5 m²</small></button>
+          <button type="button" data-surface="15"><strong data-i18n="surface.petit">Petit</strong><small data-i18n="surface.petit.detail">≈ 15 m²</small></button>
+          <button type="button" data-surface="50"><strong data-i18n="surface.moyen">Moyen</strong><small data-i18n="surface.moyen.detail">≈ 50 m²</small></button>
+          <button type="button" data-surface="150"><strong data-i18n="surface.grand">Grand</strong><small data-i18n="surface.grand.detail">150 m² et +</small></button>
         </div>
+        <input id="surface" type="number" inputmode="numeric" min="1" max="10000" placeholder="ou précise en m²" aria-labelledby="label-surface" />
+      </div>
+
+      <button type="submit" class="btn btn-cta" id="btn-go">Voir ce que je peux planter</button>
+
+      <details class="avance" id="reglages-avances">
+        <summary id="avance-titre">Réglages avancés</summary>
         <div class="champ">
-          <label for="zone" id="label-zone">🌍 Climat</label>
+          <label for="zone" id="label-zone">🌍 Climat (détecté automatiquement)</label>
           <select id="zone"></select>
         </div>
-        <div class="champ geo-wrap">
-          <button class="btn geo" id="btn-geo" title="Me localiser">📡 Me localiser</button>
-          <button class="btn" id="btn-go">Voir</button>
+        <div class="zone-info">
+          <span class="badge-zone" id="badge-zone">🍃 Tempéré</span>
+          <span class="zone-note" id="zone-note">Climat de référence. Ajuste-le si besoin.</span>
         </div>
-      </div>
-      <div class="zone-info">
-        <span class="badge-zone" id="badge-zone">🍃 Tempéré</span>
-        <span class="zone-note" id="zone-note">Climat de référence. Ajuste-le si besoin.</span>
-      </div>
-    </div>
+      </details>
+    </form>
   </section>
 
-  <div class="outils">
-    <input id="recherche" class="recherche" type="search" placeholder="🔍 Rechercher une plante (tomate, basilic, figuier…)" autocomplete="off" />
-    <div class="vue-toggle" role="group" aria-label="Affichage" id="vue-toggle">
-      <button id="vue-liste" class="vbtn actif" title="Liste compacte">☰</button>
-      <button id="vue-cartes" class="vbtn" title="Cartes">▦</button>
+  <div class="resultats-seulement">
+    <div class="outils">
+      <input id="recherche" class="recherche" type="search" placeholder="🔍 Rechercher une culture" autocomplete="off" />
+      <button type="button" class="btn-outil" id="btn-filtrer" aria-expanded="false" aria-controls="panneau-filtres">⚙️ Filtrer</button>
+      <button class="mon-potager" id="mon-potager" hidden>🌱 Mon potager (0)</button>
     </div>
-    <button class="mon-potager" id="mon-potager" hidden>🌱 Mon potager (0)</button>
-    <button class="btn-ajouter" id="btn-ajouter">➕ Ajouter</button>
-    <button class="btn-ajouter" id="btn-ressources">🧰 Mes ressources</button>
-    <button class="btn-photo" id="btn-photo">📷 Photo sachet</button>
-    <button class="btn-photo" id="btn-identifier">🔍 Identifier une plante</button>
-    <input id="input-identifier" type="file" accept="image/jpeg,image/png,image/*" capture="environment" hidden />
-    <button class="btn-ajouter" id="btn-plan">🗺️ Plan du jardin</button>
-    <input id="input-photo" type="file" accept="image/*" capture="environment" hidden />
+
+    <div class="panneau-filtres" id="panneau-filtres" hidden>
+      <nav class="filtres" id="filtres" aria-label="Filtres"></nav>
+      <div class="vue-toggle" role="group" aria-label="Affichage" id="vue-toggle">
+        <button id="vue-liste" class="vbtn actif" title="Liste compacte">☰</button>
+        <button id="vue-cartes" class="vbtn" title="Cartes">▦</button>
+      </div>
+    </div>
+
+    <details class="plus-outils" id="plus-outils">
+      <summary id="plus-outils-titre">🧰 Plus d'outils</summary>
+      <div class="plus-outils-grille">
+        <button class="btn-ajouter" id="btn-ajouter">➕ Ajouter</button>
+        <button class="btn-ajouter" id="btn-ressources">🧰 Mes ressources</button>
+        <button class="btn-photo" id="btn-photo">📷 Photo sachet</button>
+        <button class="btn-photo" id="btn-identifier">🔍 Identifier une plante</button>
+        <button class="btn-ajouter" id="btn-plan">🗺️ Plan du jardin</button>
+      </div>
+      <input id="input-identifier" type="file" accept="image/jpeg,image/png,image/*" capture="environment" hidden />
+      <input id="input-photo" type="file" accept="image/*" capture="environment" hidden />
+    </details>
   </div>
 
-  <nav class="filtres" id="filtres" aria-label="Filtres"></nav>
+  <main class="resultats-seulement">
+    <section class="section section-maintenant" id="section-now">
+      <div class="section-titre">
+        <h2 id="now-titre">À planter maintenant</h2><span class="pastille" id="now-count">0</span>
+      </div>
+      <p class="section-sous">C'est le bon moment pour ces cultures dans ta zone, ce mois-ci.</p>
+      <div class="grille grille-maintenant" id="grille-now"></div>
+    </section>
 
-  <main>
     <section class="section" id="section-lune">
       <button class="bandeau-lune" id="bandeau-lune" title="Voir le calendrier lunaire"></button>
+    </section>
+
+    <section class="section" id="section-objectif" hidden></section>
+
+    <section class="section" id="section-invite-plan" hidden>
+      <div class="invite-plan">
+        <span class="invite-plan-icone" aria-hidden="true">🗺️</span>
+        <div class="invite-plan-texte">
+          <strong id="invite-plan-titre">Tu veux optimiser leur emplacement ?</strong>
+          <span id="invite-plan-sous">Dessine ton jardin pour organiser tes planches et la rotation des cultures.</span>
+        </div>
+        <div class="invite-plan-actions">
+          <button type="button" class="btn" id="btn-invite-plan">Dessiner mon jardin</button>
+          <button type="button" class="lien-discret" id="invite-plan-plustard">Plus tard</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="section-etapes" hidden>
+      <div class="section-titre">
+        <h2 id="etapes-titre">Prochaines étapes au potager</h2><span class="pastille" id="etapes-count">0</span>
+      </div>
+      <p class="section-sous" id="etapes-sous">Prévisions calculées d'après tes dates de semis et de plantation.</p>
+      <div class="etapes" id="liste-etapes"></div>
+    </section>
+
+    <section class="section" id="section-soon" hidden>
+      <div class="section-titre soon">
+        <h2 id="soon-titre">Bientôt</h2><span class="pastille" id="soon-count">0</span>
+      </div>
+      <p class="section-sous" id="soon-sous">La fenêtre s'ouvre le mois prochain : de quoi préparer la place et les graines.</p>
+      <div class="grille" id="grille-soon"></div>
+    </section>
+
+    <section class="section" id="section-autres">
+      <div class="section-titre"><h2 id="autres-titre">Autres cultures adaptées</h2></div>
+      <p class="section-sous" id="autres-sous">Toutes les cultures qui s'accommodent de ton climat.</p>
+      <div class="grille" id="grille-autres"></div>
+      <div class="vide" id="vide" hidden>Aucune culture ne correspond à ces filtres.</div>
     </section>
 
     <section class="section" id="section-plan" hidden>
@@ -125,36 +195,6 @@
         <div class="plan-grille" id="plan-grille"></div>
       </div>
       <div class="plan-legende" id="plan-legende"></div>
-    </section>
-
-    <section class="section" id="section-etapes" hidden>
-      <div class="section-titre">
-        <h2 id="etapes-titre">Prochaines étapes au potager</h2><span class="pastille" id="etapes-count">0</span>
-      </div>
-      <p class="section-sous" id="etapes-sous">Prévisions calculées d'après tes dates de semis et de plantation.</p>
-      <div class="etapes" id="liste-etapes"></div>
-    </section>
-
-    <section class="section" id="section-now" hidden>
-      <div class="section-titre">
-        <h2 id="now-titre">À planter maintenant</h2><span class="pastille" id="now-count">0</span>
-      </div>
-      <p class="section-sous">C'est le bon moment pour ces variétés dans ta zone, ce mois-ci.</p>
-      <div class="grille" id="grille-now"></div>
-    </section>
-
-    <section class="section" id="section-soon" hidden>
-      <div class="section-titre soon">
-        <h2 id="soon-titre">Bientôt (le mois prochain)</h2><span class="pastille" id="soon-count">0</span>
-      </div>
-      <div class="grille" id="grille-soon"></div>
-    </section>
-
-    <section class="section" id="section-autres">
-      <div class="section-titre"><h2 id="autres-titre">Autres variétés adaptées</h2></div>
-      <p class="section-sous" id="autres-sous">Toutes les cultures qui s'accommodent de ton climat.</p>
-      <div class="grille" id="grille-autres"></div>
-      <div class="vide" id="vide" hidden>Aucune variété ne correspond à ces filtres.</div>
     </section>
   </main>
 

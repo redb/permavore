@@ -23,6 +23,10 @@ const state = {
   adoptees: new Set(),       // ids des plantes adoptées (persisté)
   ressources: new Set(),     // ce que le jardinier possède (persisté)
   dates: {},                 // id -> "AAAA-MM-JJ" date de semis/plantation (persisté)
+  objectif: null,            // priorité facultative du jardinier (persistée), cf. OBJECTIFS
+  objectifMasque: false,     // l'utilisateur a écarté la question (persisté)
+  invitePlanMasquee: false,  // « Dessine ton jardin » écarté (persisté)
+  filtresOuverts: false,     // panneau de filtres déplié
 };
 
 // ---------- Persistance "Mon potager" ----------
@@ -322,6 +326,10 @@ function chargerPreferencesJardin() {
     if (typeof brut.cycle === "string"
       && (brut.cycle === "tous" || FILTRES_CYCLE.some(f => f.k === brut.cycle))) state.cycle = brut.cycle;
     state.petitsEspaces = brut.petitsEspaces === true;
+    state.objectif = typeof brut.objectif === "string" && Object.hasOwn(OBJECTIFS, brut.objectif)
+      ? brut.objectif : null;
+    state.objectifMasque = brut.objectifMasque === true;
+    state.invitePlanMasquee = brut.invitePlanMasquee === true;
     state._prefsConnues = Boolean(ville || state.surface);
     $("#ville").value = ville;
     $("#surface").value = state.surface || "";
@@ -339,6 +347,9 @@ function sauverPreferencesJardin() {
       categorie: state.categorie,
       cycle: state.cycle,
       petitsEspaces: state.petitsEspaces,
+      objectif: state.objectif,
+      objectifMasque: state.objectifMasque,
+      invitePlanMasquee: state.invitePlanMasquee,
     }));
   } catch (erreur) {
     journaliserAvertissement("preferences_jardin_echec", { message: erreur.message });
@@ -761,6 +772,9 @@ function hideAc() {
 function choisirVille(r) {
   $("#ville").value = r.nom;
   state.villeCoords = { lat: r.lat, lng: r.lng };
+  state._villeResolue = r.nom;
+  state._zoneManuelle = false;
+  erreurVille("");
   hideAc();
   const z = zoneDepuisVille(r.nom) || zoneDepuisCoords(r.lat, r.lng);
   const source = `📍 ${r.nom}${r.cp ? " (" + r.cp + ")" : ""}`;
@@ -964,7 +978,6 @@ function ouvrirModale(plante) {
   const enc = ENCOMBREMENTS[plante.encombrement], sol = SOLEILS[plante.soleil];
   const statut = state._statut(plante);
   const photo = photoPlante(plante);
-  const badge = statut === "now" ? `<span class="cal-badge">${t("modale.aplanter")}</span>` : "";
   const imgTag = photo
     ? `<img src="${echapperHTML(photo)}" alt="${echapperHTML(plante.nom)}" onerror="this.remove()" />` : "";
 
@@ -995,13 +1008,9 @@ function ouvrirModale(plante) {
         <span class="picto">${enc.picto} ${enc.label}</span>
         <span class="picto">${sol.picto} ${sol.label}</span>
       </div>
-      <p class="long">${echapperHTML(plante.long)}</p>
+      ${pourquoiHTML(plante, statut)}
 
-      <div class="bloc">
-        <h4>${t("modale.calendrier", { zone: ZONES[state.zone].label })}</h4>
-        <p style="margin:0">${t("modale.semerplanter")}<span class="${statut === "now" ? "cal-now" : ""}">${texteFenetre(plante, state.zone)}</span>${badge}</p>
-        <p style="margin:4px 0 0">${t("modale.recolte")}${echapperHTML(plante.recolte)}</p>
-      </div>
+      <p class="long">${echapperHTML(plante.long)}</p>
 
       <div class="bloc">
         <h4>${t("modale.estimation")}</h4>
@@ -1561,13 +1570,16 @@ function rendre() {
     else if (s === "soon") soon.push(p);
     else autres.push(p);
   });
-  const parNom = (a, b) => a.nom.localeCompare(b.nom);
-  now.sort(parNom); soon.sort(parNom); autres.sort(parNom);
+  // L'objectif facultatif change l'ordre, jamais le contenu.
+  const tri = (a, b) => (state.objectif
+    ? scoreObjectif(b, state.objectif) - scoreObjectif(a, state.objectif) : 0)
+    || a.nom.localeCompare(b.nom);
+  now.sort(tri); soon.sort(tri); autres.sort(tri);
 
   state._nowCount = now.length;
   rendreLune();
   rendreEtapes();
-  remplirGrille("#grille-now", now, "#section-now", "#now-count");
+  rendreMaintenant(now);
   remplirGrille("#grille-soon", soon, "#section-soon", "#soon-count");
   remplirGrille("#grille-autres", autres, null, null);
 
@@ -1591,6 +1603,10 @@ function rendre() {
     : t("autres.sous.defaut");
 
   majMonPotager();
+  majPanneauFiltres();
+  majChoixSurface();
+  rendreObjectif(visibles.length > 0 && document.body.classList.contains("resultats"));
+  rendreInvitePlan();
   if (document.body.classList.contains("configure")) majResume();
 }
 
@@ -1791,10 +1807,10 @@ function ouvrirModaleRessource(cle) {
 function majResume() {
   const z = ZONES[state.zone];
   const fmt = dateDuJour().toLocaleDateString(localeCourante(), { day: "numeric", month: "long" });
-  const items = [`<span class="bc-item">${z.emoji} ${z.label}</span>`];
+  const items = [`<span class="bc-item">${z.emoji} ${zoneCourte()}</span>`];
   if (state.surface) items.push(`<span class="bc-item">📐 ${state.surface} m²</span>`);
-  items.push(`<span class="bc-item">📅 ${fmt}</span>`);
-  items.push(`<span class="bc-item">🌱 ${state._nowCount || 0} ${getLang() === "en" ? "to plant" : "à planter"}</span>`);
+  items.push(`<span class="bc-item bc-item-date">📅 ${fmt}</span>`);
+  if (state._nowCount) items.push(`<span class="bc-item">🌱 ${state._nowCount} ${getLang() === "en" ? "to plant" : "à planter"}</span>`);
   const r = $("#bc-resume"); if (r) r.innerHTML = items.join("");
 }
 function replier() {
@@ -1808,21 +1824,69 @@ function deplier() {
   $("#barre-compacte").hidden = true;
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
-async function commit() {
-  const q = $("#ville").value.trim();
-  if (q) {
-    if (state.villeCoords) {
-      const z = zoneDepuisVille(q) || zoneDepuisCoords(state.villeCoords.lat, state.villeCoords.lng);
-      majZone(z, `📍 ${q}`);
+// Bouton « Voir ce que je peux planter » : une commune résolue suffit ; la surface
+// est facultative (sans elle, on affiche les densités au lieu d'un nombre de pieds).
+async function commit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const champ = $("#ville");
+  const q = champ.value.trim();
+  erreurVille("");
+  if (!q && !state.villeCoords) {
+    erreurVille(t("erreur.ville.vide"));
+    champ.focus();
+    return;
+  }
+  // Commune déjà résolue (liste, géolocalisation, visite précédente) : on garde
+  // la zone telle quelle, y compris une correction manuelle ou par l'altitude.
+  if (q && q !== state._villeResolue) {
+    const zDico = zoneDepuisVille(q);
+    if (zDico) {
+      state._villeResolue = q;
+      majZone(zDico, `📍 ${q}`);
     } else {
-      // Pas de sélection dans la liste : on géocode le texte saisi.
+      const bouton = $("#btn-go");
+      bouton.disabled = true;
       const res = await geocodeVille(q);
-      if (res.length) choisirVille(res[0]);
-      else majZone(state.zone, t("ville.introuvable2", { v: q }));
+      bouton.disabled = false;
+      if (!res.length) {
+        erreurVille(t("erreur.ville.introuvable", { v: q }));
+        champ.focus();
+        return;
+      }
+      choisirVille(res[0]);
     }
   }
   sauverPreferencesJardin();
+  afficherResultats();
+}
+
+function afficherResultats() {
+  document.body.classList.add("resultats");
   replier();
+  rendre();
+}
+
+function erreurVille(message) {
+  const p = $("#erreur-ville");
+  if (!p) return;
+  p.textContent = message || "";
+  p.hidden = !message;
+}
+
+// « Climat détecté : … · corriger » sous le champ commune
+function majClimatDetecte(texte) {
+  const p = $("#climat-detecte");
+  if (!p) return;
+  if (texte) { p.textContent = texte; p.hidden = false; return; }
+  if (!state._villeResolue && !state.villeCoords) { p.hidden = true; return; }
+  const z = ZONES[state.zone];
+  p.innerHTML = `${t(state._zoneManuelle ? "climat.choisi" : "climat.detecte", { zone: `${z.emoji} ${z.label}` })} · `
+    + `<button type="button" id="btn-corriger-climat">${t("climat.corriger")}</button>`;
+  p.hidden = false;
+  $("#btn-corriger-climat").addEventListener("click", () => {
+    $("#reglages-avances").open = true;
+    $("#zone").focus();
+  });
 }
 
 function setVue(v) {
@@ -1850,6 +1914,7 @@ function majZone(zone, source) {
   $("#badge-zone").innerHTML = `${z.emoji} ${z.label}`;
   $("#zone-note").textContent = (source ? source + " · " : "") + z.note;
   sauverPreferencesJardin();
+  majClimatDetecte();
   rendre();
 }
 
@@ -1905,6 +1970,15 @@ function traduireStatique() {
   set("#btn-photo", t("btn.photo"));
   set("#btn-identifier", t("btn.identifier"));
   set("#btn-plan", t("btn.plan"));
+  set("#btn-filtrer", t("btn.filtrer"));
+  set("#plus-outils-titre", t("outils.plus"));
+  set("#avance-titre", t("avance.titre"));
+  set("#soon-sous", t("soon.sous"));
+  set("#invite-plan-titre", t("invite.plan.titre"));
+  set("#invite-plan-sous", t("invite.plan.sous"));
+  set("#btn-invite-plan", t("invite.plan.btn"));
+  set("#invite-plan-plustard", t("invite.plan.plustard"));
+  document.querySelectorAll("[data-i18n]").forEach(e => { e.textContent = t(e.dataset.i18n); });
   attr("#vue-liste", "title", t("vue.liste.title"));
   attr("#vue-cartes", "title", t("vue.cartes.title"));
   attr("#vue-toggle", "aria-label", t("affichage.label"));
@@ -1934,7 +2008,10 @@ function init() {
   $("#vue-liste").classList.toggle("actif", state.vue === "liste");
   $("#vue-cartes").classList.toggle("actif", state.vue === "cartes");
 
-  sel.addEventListener("change", () => majZone(sel.value, getLang() === "en" ? "Manual choice" : "Choix manuel"));
+  sel.addEventListener("change", () => {
+    state._zoneManuelle = true;
+    majZone(sel.value, getLang() === "en" ? "Manual choice" : "Choix manuel");
+  });
 
   // Autocomplétion de ville (BAN)
   const inputVille = $("#ville");
@@ -1948,7 +2025,7 @@ function init() {
       e.preventDefault(); acIndex = Math.max(acIndex - 1, 0); surlignerAc();
     } else if (e.key === "Enter") {
       if (ouvert && acIndex >= 0) { e.preventDefault(); choisirVille(acItems[acIndex]); }
-      else commit();
+      // sinon : la soumission du formulaire (Entrée) appelle commit()
     } else if (e.key === "Escape") { hideAc(); }
   });
   inputVille.addEventListener("blur", () => setTimeout(hideAc, 150));
@@ -1956,7 +2033,28 @@ function init() {
     const b = e.target.closest(".ac-item");
     if (b) { e.preventDefault(); choisirVille(acItems[+b.dataset.i]); }
   });
-  $("#btn-go").addEventListener("click", commit);
+  $("#form-entree").addEventListener("submit", commit);
+  document.querySelectorAll("#surface-choix [data-surface]").forEach(b => {
+    b.addEventListener("click", () => {
+      state.surface = Number(b.dataset.surface);
+      $("#surface").value = state.surface;
+      sauverPreferencesJardin();
+      rendre();
+    });
+  });
+  $("#btn-filtrer").addEventListener("click", () => {
+    state.filtresOuverts = !($("#panneau-filtres").hidden === false);
+    majPanneauFiltres();
+  });
+  $("#btn-invite-plan").addEventListener("click", () => {
+    if ($("#section-plan").hidden) basculerPlan();
+    else $("#section-plan").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  $("#invite-plan-plustard").addEventListener("click", () => {
+    state.invitePlanMasquee = true;
+    sauverPreferencesJardin();
+    rendreInvitePlan();
+  });
   $("#btn-modifier").addEventListener("click", deplier);
   $("#surface").addEventListener("input", e => {
     const v = parseInt(e.target.value, 10);
@@ -2014,14 +2112,15 @@ function init() {
   majZone(state.zone, null);
   completerPhotosManquantes();   // non bloquant : la tuile emoji reste le repli
 
-  // Préférences déjà connues (visite précédente) : afficher directement le résumé replié.
-  if (state._prefsConnues) {
-    const ville = $("#ville").value.trim();
-    if (ville) {
-      const z = zoneDepuisVille(ville);
-      if (z) majZone(z, `📍 ${ville}`);
-    }
-    replier();
+  // Visite précédente avec une commune connue : on va droit aux résultats.
+  // Sans commune, on reste sur l'écran d'entrée (rien n'est affiché à vide).
+  const villeConnue = $("#ville").value.trim();
+  if (state._prefsConnues && villeConnue) {
+    state._villeResolue = villeConnue;
+    const z = zoneDepuisVille(villeConnue);
+    if (z) majZone(z, `📍 ${villeConnue}`);
+    majClimatDetecte();
+    afficherResultats();
   }
 }
 
@@ -2034,32 +2133,299 @@ function appliquerVille() {
 }
 
 function localiser() {
-  const note = $("#zone-note");
-  if (!navigator.geolocation) { note.textContent = t("geo.indisponible"); return; }
-  note.textContent = t("geo.encours");
+  erreurVille("");
+  if (!navigator.geolocation) { erreurVille(t("geo.indisponible")); return; }
+  majClimatDetecte(t("geo.encours"));
   navigator.geolocation.getCurrentPosition(
     async pos => {
       const { latitude, longitude } = pos.coords;
       let z = zoneDepuisCoords(latitude, longitude);
+      state.villeCoords = { lat: latitude, lng: longitude };
       majZone(z, t("geo.positiondetectee"));
-      note.textContent = t("geo.recherchecommune");
+      majClimatDetecte(t("geo.recherchecommune"));
       const v = await reverseVille(latitude, longitude);
       let source = t("geo.positiondetectee");
       if (v) {
         $("#ville").value = v.nom;                 // on remplit la préférence "ville"
         state.villeCoords = { lat: v.lat, lng: v.lng };
+        state._villeResolue = v.nom;
+        state._zoneManuelle = false;
         z = zoneDepuisVille(v.nom) || z;           // affine si commune connue du dico
         source = `📡 ${v.nom}${v.cp ? " (" + v.cp + ")" : ""}`;
         majZone(z, source);
         sauverPreferencesJardin();
+      } else {
+        majClimatDetecte();
       }
-      replier();
+      // Déjà dans les résultats (modification) : on les met à jour. Sinon, on laisse
+      // la personne choisir sa surface puis valider.
+      if (document.body.classList.contains("resultats")) replier();
+      else $("#btn-go").scrollIntoView({ behavior: "smooth", block: "center" });
       // Ici l'altitude est celle du GPS : c'est le cas le plus fiable, on l'utilise.
       appliquerAltitude(latitude, longitude, z, source);
     },
-    () => { note.textContent = t("geo.refusee"); },
+    () => { majClimatDetecte(); erreurVille(t("geo.refusee")); },
     { timeout: 8000, maximumAge: 600000 }
   );
+}
+
+
+/* =========================================================================
+   Logique « jardin nourricier » : atouts, durée, objectif, explication
+   Règle : rien d'inventé. Ce qui vient d'un classement éditorial est marqué
+   comme estimation ; ce qui manque dans les données n'est pas affiché.
+   ========================================================================= */
+
+// Durée approximative entre la mise en place et le début de la récolte.
+//  - « N à M semaines » dans la fiche → valeur de la fiche ;
+//  - sinon écart entre le début de la 1re fenêtre de semis et le 1er mois de
+//    récolte (estimation grossière, au mois près) ;
+//  - vivaces : non pertinent (première récolte souvent l'année suivante ou plus).
+function zoneCourte(cle = state.zone) {
+  return String(ZONES[cle].label).replace(/\s*\(.*\)\s*$/, "");
+}
+// « Semis : mars » en français, « Sowing: March » en anglais.
+function deuxPoints() { return getLang() === "en" ? ": " : " : "; }
+
+function dureeAvantRecolte(plante) {
+  if (plante.cycle === "vivace") return null;
+  const jours = delaiRecolteJours(plante);
+  if (jours) return { jours, source: "fiche" };
+  const moisR = moisRecolte(plante);
+  const fenetre = Array.isArray(plante.semis) && plante.semis[0];
+  if (!moisR || !fenetre) return null;
+  let ecart = moisR - fenetre[0];
+  if (ecart < 0) ecart += 12;
+  return ecart > 0 ? { mois: ecart, source: "estimation" } : null;
+}
+function texteDuree(duree, court = false) {
+  if (!duree) return "";
+  const prefixe = court ? "duree.court." : "duree.";
+  if (duree.jours) return t(prefixe + "semaines", { n: Math.round(duree.jours / 7) });
+  return t(prefixe + (duree.mois > 1 ? "mois.pl" : "mois"), { n: duree.mois });
+}
+
+// Récolte qui couvre l'hiver (décembre ou janvier) : utile pour « toute l'année ».
+function recolteHivernale(plante) {
+  const debut = moisRecolte(plante), fin = moisFinRecolte(plante);
+  if (!debut || !fin) return false;
+  return moisDansFenetre(12, { debut, fin }) || moisDansFenetre(1, { debut, fin });
+}
+
+const ATOUTS_INFO = {
+  nourrissant:  { emoji: "🍠", estime: true },
+  rapide:       { emoji: "⚡", estime: false },
+  productif:    { emoji: "🧺", estime: true },
+  facile:       { emoji: "👌", estime: false },
+  conservation: { emoji: "🏺", estime: true },
+  vivace:       { emoji: "♻️", estime: false },
+};
+function atoutsPlante(plante) {
+  const ed = typeof ATOUTS_EDITORIAUX !== "undefined" ? ATOUTS_EDITORIAUX : {};
+  const dans = cle => Array.isArray(ed[cle]) && ed[cle].includes(plante.id);
+  const duree = dureeAvantRecolte(plante);
+  const rapide = Boolean(duree && ((duree.jours && duree.jours <= 70)
+    || (duree.mois && duree.mois <= 2 && (plante.mode || "semis") === "semis")));
+  const atouts = [];
+  if (dans("nourrissant")) atouts.push("nourrissant");
+  if (rapide) atouts.push("rapide");
+  if (dans("productif")) atouts.push("productif");
+  if (plante.diff === 1) atouts.push("facile");
+  if (dans("conservation")) atouts.push("conservation");
+  if (plante.cycle === "vivace") atouts.push("vivace");
+  return atouts;
+}
+function atoutsHTML(plante, max = 6, exclure = []) {
+  return atoutsPlante(plante).filter(a => !exclure.includes(a)).slice(0, max).map(a => {
+    const info = ATOUTS_INFO[a];
+    const titre = info.estime ? ` title="${echapperHTML(t("atout.estimation.title"))}"` : "";
+    return `<span class="atout${info.estime ? " estime" : ""}"${titre}>${info.emoji} ${t("atout." + a)}</span>`;
+  }).join("");
+}
+
+// Objectifs : des POIDS appliqués aux atouts. Ils réordonnent, ils ne filtrent pas.
+const OBJECTIFS = {
+  nourriture:  { nourrissant: 3, productif: 2, conservation: 1 },
+  rapide:      { rapide: 3, facile: 1 },
+  peu_travail: { facile: 3, vivace: 2 },
+  annee:       { conservation: 3, vivace: 2, _hiver: 3 },
+  resilient:   { vivace: 3, facile: 1, conservation: 1, _rustique: 2 },
+  plaisir:     { productif: 2, facile: 1, _fruitAromatique: 2 },
+};
+function scoreObjectif(plante, objectif) {
+  const poids = OBJECTIFS[objectif];
+  if (!poids) return 0;
+  let score = atoutsPlante(plante).reduce((n, a) => n + (poids[a] || 0), 0);
+  if (poids._rustique && !plante.frileux) score += poids._rustique;
+  if (poids._hiver && recolteHivernale(plante)) score += poids._hiver;
+  if (poids._fruitAromatique && (plante.cat === "fruit" || plante.cat === "aromatique")) score += poids._fruitAromatique;
+  return score;
+}
+
+// « À planter maintenant » : grandes cartes, quel que soit le mode d'affichage.
+function rendreMaintenant(liste) {
+  const grille = $("#grille-now"), section = $("#section-now"), compteur = $("#now-count");
+  if (!grille || !section) return;
+  grille.innerHTML = "";
+  grille.className = "grille grille-maintenant";
+  const restreint = Boolean(state.recherche) || filtresActifs() || state.filtrePotager;
+  if (liste.length) {
+    liste.forEach(p => grille.appendChild(creerCarteMaintenant(p)));
+  } else if (!restreint) {
+    grille.innerHTML = `<p class="maintenant-vide">${t("now.vide")}</p>`;
+  }
+  section.hidden = liste.length === 0 && restreint;
+  if (compteur) { compteur.textContent = liste.length; compteur.hidden = liste.length === 0; }
+}
+
+function creerCarteMaintenant(plante) {
+  const photo = photoPlante(plante);
+  const sol = SOLEILS[plante.soleil], diff = DIFFICULTES[plante.diff];
+  const on = estAdoptee(plante.id);
+  const duree = dureeAvantRecolte(plante);
+  const mode = CLE_MODE.includes(plante.mode) ? plante.mode : "semis";
+  const place = state.surface
+    ? t(nbPieds(plante, surfaceDediee(plante, state.surface)) >= 2 ? "carte.piedsconseilles.pl" : "carte.piedsconseilles",
+        { n: texteNombrePieds(nbPieds(plante, surfaceDediee(plante, state.surface))) }).replace(/^🪴\s*/, "")
+    : texteDensite(plante);
+  const rendement = typeof RENDEMENTS_SOURCES !== "undefined" && RENDEMENTS_SOURCES[plante.id];
+
+  const carte = el("article", "carte-m");
+  carte.innerHTML = `
+    <div class="cm-img" style="background:${fondCarte(plante)}">
+      <span aria-hidden="true">${echapperHTML(plante.emoji)}</span>${photo
+        ? `<img src="${echapperHTML(photo)}" alt="" loading="lazy" onerror="this.remove()" />` : ""}
+    </div>
+    <div class="cm-corps">
+      <h3>${echapperHTML(plante.nom)}</h3>
+      <div class="atouts">${atoutsHTML(plante, 3, ["facile"])}</div>
+      <ul class="cm-infos">
+        <li><span>🌱</span><span>${libelleMode(mode)}${deuxPoints()}<strong>${texteFenetre(plante, state.zone)}</strong></span></li>
+        <li><span>🧺</span><span>${t("carte.recolte.label")}${deuxPoints()}${echapperHTML(plante.recolte)}</span></li>
+        ${duree ? `<li><span>⏱️</span><span>${texteDuree(duree)}</span></li>` : ""}
+        <li><span>${sol.picto}</span><span>${sol.label} · ${diff.picto} ${diff.label}</span></li>
+        <li><span>📐</span><span>${t("carte.surface.label")}${deuxPoints()}${place}</span></li>
+        ${rendement ? `<li><span>📊</span><span>${t("rendement.label", {
+          min: nombreFR(rendement.min), max: nombreFR(rendement.max),
+          unite: echapperHTML(rendement.unite), source: echapperHTML(rendement.source) })}</span></li>` : ""}
+      </ul>
+      <div class="cm-actions">
+        <button type="button" class="adopt ${on ? "on" : ""}" data-adopt="${echapperHTML(plante.id)}">
+          ${on ? t("carte.plante") : t("carte.adopter")}</button>
+        <button type="button" class="cm-pourquoi">${t("carte.pourquoi")}</button>
+      </div>
+    </div>`;
+  carte.addEventListener("click", () => ouvrirModale(plante));
+  carte.querySelector(".cm-pourquoi").addEventListener("click", e => {
+    e.stopPropagation();
+    ouvrirModale(plante);
+    const bloc = document.querySelector("#bloc-pourquoi");
+    if (bloc) bloc.scrollIntoView({ block: "start" });
+  });
+  wireAdopt(carte, plante);
+  return carte;
+}
+
+// Explication de la recommandation, calculée à partir des seules données disponibles.
+// Point d'extension prévu : signaux météo / microclimat (cf. docs/architecture-recommandation.md).
+function pourquoiHTML(plante, statut) {
+  const zone = zoneCourte();
+  const mois = dateDuJour().getMonth() + 1;
+  const verbe = t(plante.mode && plante.mode !== "semis" ? "pq.planter" : "pq.semer");
+  const fenetres = plante.semis.map(w => fenetreZone(w, state.zone, plante));
+  let phrase;
+  if (statut === "now") {
+    const f = fenetres.find(x => moisDansFenetre(mois, x)) || fenetres[0];
+    if (f.debut === f.fin) phrase = t("pq.now.unmois", { zone, verbe, mois: moisNom(mois) });
+    else if (f.fin === mois) phrase = t("pq.now.dernier", { zone, verbe, mois: moisNom(mois) });
+    else phrase = t("pq.now", { zone, verbe, debut: moisNom(f.debut), fin: moisNom(f.fin) });
+  } else if (statut === "soon") {
+    phrase = t("pq.soon", { zone, verbe, mois: moisNom((mois % 12) + 1) });
+  } else {
+    phrase = t("pq.later", { zone, verbe, fenetre: texteFenetre(plante, state.zone) });
+  }
+  const duree = texteDuree(dureeAvantRecolte(plante), true);
+  const sol = SOLEILS[plante.soleil];
+  const atouts = atoutsHTML(plante);
+  return `
+      <div class="bloc bloc-pourquoi" id="bloc-pourquoi">
+        <h4>${t("pq.titre." + (statut === "now" || statut === "soon" ? statut : "later"))}</h4>
+        <p class="pq-phrase">${phrase}</p>
+        ${plante.frileux && statut !== "later" ? `<p class="pq-frileuse">❄️ ${t("pq.frileuse")}</p>` : ""}
+        <div class="fiche">
+          <span class="k">${t("pq.row.periode")}</span><span class="v">${texteFenetre(plante, state.zone)}</span>
+          <span class="k">${t("pq.row.recolte")}</span><span class="v">${echapperHTML(plante.recolte)}</span>
+          ${duree ? `<span class="k">${t("pq.row.cycle")}</span><span class="v">${duree}</span>` : ""}
+          <span class="k">${t("pq.row.gel")}</span><span class="v">${t(plante.frileux ? "pq.oui" : "pq.non")}</span>
+          <span class="k">${t("pq.row.exposition")}</span><span class="v">${sol.picto} ${sol.label}</span>
+        </div>
+        ${atouts ? `<div class="atouts" style="margin-top:10px">${atouts}</div>` : ""}
+        <p class="pq-note">${t("pq.note")}</p>
+      </div>`;
+}
+
+// Question facultative, posée seulement une fois des résultats affichés.
+function rendreObjectif(aDesResultats) {
+  const section = $("#section-objectif");
+  if (!section) return;
+  const edition = state._objectifEdition === true;
+  if (!aDesResultats || (!state.objectif && state.objectifMasque && !edition)) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+  if (state.objectif && !edition) {
+    section.innerHTML = `<div class="objectif-compact">
+      <span>${t("objectif.actif", { label: t("objectif." + state.objectif) })}</span>
+      <button type="button" class="lien-discret" id="objectif-changer">${t("objectif.changer")}</button></div>`;
+    $("#objectif-changer").addEventListener("click", () => { state._objectifEdition = true; rendreObjectif(true); });
+    return;
+  }
+  section.innerHTML = `<div class="objectif-carte">
+    <h3>${t("objectif.titre")}</h3>
+    <p>${t("objectif.sous")}</p>
+    <div class="objectif-choix">${Object.keys(OBJECTIFS).map(k =>
+      `<button type="button" data-objectif="${k}" class="${state.objectif === k ? "actif" : ""}">${t("objectif." + k)}</button>`).join("")}</div>
+    <button type="button" class="lien-discret" id="objectif-passer">${state.objectif ? t("objectif.aucun") : t("objectif.passer")}</button>
+  </div>`;
+  section.querySelectorAll("[data-objectif]").forEach(b => b.addEventListener("click", () => {
+    state.objectif = b.dataset.objectif;
+    state._objectifEdition = false;
+    sauverPreferencesJardin();
+    rendre();
+  }));
+  $("#objectif-passer").addEventListener("click", () => {
+    state.objectif = null;
+    state.objectifMasque = true;
+    state._objectifEdition = false;
+    sauverPreferencesJardin();
+    rendre();
+  });
+}
+
+// « Tu veux optimiser leur emplacement ? » : dès la 1re culture ajoutée, tant
+// qu'aucune planche n'est dessinée et que l'invitation n'a pas été écartée.
+function rendreInvitePlan() {
+  const section = $("#section-invite-plan");
+  if (!section) return;
+  const planOuvert = !$("#section-plan").hidden;
+  const aDesPlanches = typeof jardin !== "undefined" && Array.isArray(jardin.planches) && jardin.planches.length > 0;
+  section.hidden = !(state.adoptees.size > 0 && !aDesPlanches && !planOuvert && !state.invitePlanMasquee);
+}
+
+function filtresActifs() {
+  return state.categorie !== "tous" || state.cycle !== "tous" || state.petitsEspaces === true;
+}
+function majPanneauFiltres() {
+  const panneau = $("#panneau-filtres"), bouton = $("#btn-filtrer");
+  if (!panneau || !bouton) return;
+  const ouvert = state.filtresOuverts || filtresActifs();
+  panneau.hidden = !ouvert;
+  bouton.setAttribute("aria-expanded", String(ouvert));
+}
+function majChoixSurface() {
+  document.querySelectorAll("#surface-choix [data-surface]").forEach(b =>
+    b.classList.toggle("actif", Number(b.dataset.surface) === state.surface));
 }
 
 document.addEventListener("DOMContentLoaded", init);
@@ -2302,6 +2668,7 @@ function basculerPlan() {
   s.hidden = !ouvert;
   $("#btn-plan").classList.toggle("actif", ouvert);
   if (ouvert) { rendrePlan(); s.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  rendreInvitePlan();
 }
 
 function rendrePlan() {
