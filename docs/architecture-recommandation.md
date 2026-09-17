@@ -132,3 +132,61 @@ DÉCOUVRIR → AJOUTER → PLACER → CULTIVER → RÉCOLTER → REMPLACER
 
 Prochaine itération suggérée : relier « Ajouter » à une planche (surface occupée) et
 calculer la date de libération prévue, pour proposer la succession **avant** la récolte.
+
+## 9. Deux curseurs indépendants (2026-09-17)
+
+| Axe | Valeur par défaut | Effet |
+|---|---|---|
+| 🌺 Agrément ↔ 🥔 Nourricier | 0,70 (plutôt nourricier) | pondère `scoreNourricier` / `scoreAgrement` |
+| 🏡 Local éprouvé ↔ 🌍 Exotique expérimental | 0,25 (plutôt éprouvé) | pondère `scoreExperimental` / son inverse |
+
+Ils **réordonnent** et ne filtrent jamais. Une culture manifestement incompatible avec
+la zone (`adapteeZone`) reste écartée, même curseur à fond : seuil minimal de
+plausibilité agronomique.
+
+« Local éprouvé » = **réussite bien établie dans les conditions locales**, pas
+« espèce d'ici ».
+
+### Statut par zone — seulement avec les données réellement présentes
+
+`statutCulture()` n'utilise que : catégorie éditoriale (`exotique`), `frileux`, zone.
+
+| Condition | Statut | Message |
+|---|---|---|
+| non adaptée à la zone | incompatible | (écartée) |
+| exotique + zone froide (continental, montagne) | expérimental | saison chaude plus courte, démarrage au chaud, réussite incertaine |
+| exotique, autre zone | possible | peu courante mais climat plutôt adapté |
+| frileuse + zone froide | possible | attendre le réchauffement du sol ou démarrer à l'abri |
+| sinon | éprouvé | — |
+
+**Champs manquants, à remplir sans jamais les deviner** (cf. `data.js`) : rusticité,
+température minimale, durée minimale de saison chaude, besoins thermiques, culture
+sous abri, démarrage en intérieur, retours d'expérience locaux. Le statut se
+raffinera dès qu'ils existeront ; à terme, « éprouvé » devra pouvoir être renforcé
+par les réussites rapportées par des jardiniers en conditions comparables.
+
+## 10. Horizon 5 ans — état des sources
+
+`PROJECTIONS_CLIMAT` est **vide**. La fiche affiche « projection non disponible ».
+Aucune tendance n'est simulée, et le réchauffement n'est jamais présenté comme
+favorable par défaut : une culture exigeant du froid hivernal peut recevoir
+`tendance: "defavorable"`.
+
+Toute entrée doit porter : `source`, `scenario`, `periodeReference`, `horizon`,
+`resolution`, `miseAJour`, `confiance`, `facteurs` (indicateurs réellement utilisés).
+Formulations imposées : « devrait devenir plus favorable », « tendance favorable »,
+« incertitude importante » — jamais « dans 5 ans cette plante poussera ici ».
+
+Sources évaluées le 2026-09-17 :
+
+| Source | Contenu | Réutilisable ? |
+|---|---|---|
+| **Open-Meteo Climate API** | projections CMIP6 descendues d'échelle, par coordonnées, scénarios SSP | **Oui, testé** : réponse 200, 365 jours pour 2031 sur Rumilly (mini −7,5 °C, 12 jours > 30 °C). Gratuit, sans clé. |
+| **DRIAS (Météo-France)** | projections régionalisées officielles, indicateurs agro (gelées, jours chauds, sécheresse) | À privilégier comme référence française ; téléchargement, pas d'API temps réel |
+| **API Données climatologiques (Météo-France, data.gouv)** | climatologie **observée** (6 min → mensuel), Licence Ouverte 2.0, compte requis, 50 req/min | Oui, pour la période de référence et les normales — pas pour le futur |
+| **AgroClimat 2050 (Serge Zaka, AZKA, PAESI)** | cartographie agroclimatique prédictive, export JPG | **Pas d'API ni de licence de réutilisation documentée**, et le site précise que les sorties n'ont « aucun caractère officiel ». À solliciter pour un accord et pour les seuils agronomiques par culture, pas à extraire automatiquement. |
+
+Brique manquante côté agronomie : les **seuils par culture** (jours > 30 °C requis,
+durée de saison sans gel, besoins en froid hivernal). Sans eux, une projection
+climatique ne peut pas être traduite en « plus ou moins favorable » pour une culture
+donnée — c'est là que l'expertise d'un agroclimatologue a le plus de valeur.

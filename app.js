@@ -24,6 +24,8 @@ const state = {
   ressources: new Set(),     // ce que le jardinier possède (persisté)
   dates: {},                 // id -> "AAAA-MM-JJ" date de semis/plantation (persisté)
   objectif: null,            // priorité facultative du jardinier (persistée), cf. OBJECTIFS
+  curseurNourricier: 0.7,    // 0 = 🌺 agrément … 1 = 🥔 nourricier (persisté)
+  curseurExperimental: 0.25, // 0 = 🏡 local éprouvé … 1 = 🌍 exotique expérimental (persisté)
   objectifMasque: false,     // l'utilisateur a écarté la question (persisté)
   invitePlanMasquee: false,  // « Dessine ton jardin » écarté (persisté)
   filtresOuverts: false,     // panneau de filtres déplié
@@ -329,6 +331,9 @@ function chargerPreferencesJardin() {
     state.objectif = typeof brut.objectif === "string" && Object.hasOwn(OBJECTIFS, brut.objectif)
       ? brut.objectif : null;
     state.objectifMasque = brut.objectifMasque === true;
+    const curseur = (v, defaut) => (Number.isFinite(Number(v)) && v >= 0 && v <= 1) ? Number(v) : defaut;
+    state.curseurNourricier = curseur(brut.curseurNourricier, 0.7);
+    state.curseurExperimental = curseur(brut.curseurExperimental, 0.25);
     state.invitePlanMasquee = brut.invitePlanMasquee === true;
     state._prefsConnues = Boolean(ville || state.surface);
     $("#ville").value = ville;
@@ -349,6 +354,8 @@ function sauverPreferencesJardin() {
       petitsEspaces: state.petitsEspaces,
       objectif: state.objectif,
       objectifMasque: state.objectifMasque,
+      curseurNourricier: state.curseurNourricier,
+      curseurExperimental: state.curseurExperimental,
       invitePlanMasquee: state.invitePlanMasquee,
     }));
   } catch (erreur) {
@@ -1010,6 +1017,8 @@ function ouvrirModale(plante) {
       </div>
       ${pourquoiHTML(plante, statut)}
 
+      ${blocChezToiHTML(plante)}
+
       <p class="long">${echapperHTML(plante.long)}</p>
 
       <div class="bloc">
@@ -1571,9 +1580,8 @@ function rendre() {
     else autres.push(p);
   });
   // L'objectif facultatif change l'ordre, jamais le contenu.
-  const tri = (a, b) => (state.objectif
-    ? scoreObjectif(b, state.objectif) - scoreObjectif(a, state.objectif) : 0)
-    || a.nom.localeCompare(b.nom);
+  const note = p => (state.objectif ? scoreObjectif(p, state.objectif) : 0) + scoreCurseurs(p);
+  const tri = (a, b) => (note(b) - note(a)) || a.nom.localeCompare(b.nom);
   now.sort(tri); soon.sort(tri); autres.sort(tri);
 
   state._nowCount = now.length;
@@ -1605,7 +1613,7 @@ function rendre() {
   majMonPotager();
   majPanneauFiltres();
   majChoixSurface();
-  rendreObjectif(visibles.length > 0 && document.body.classList.contains("resultats"));
+  rendrePreferences(visibles.length > 0 && document.body.classList.contains("resultats"));
   rendreInvitePlan();
   if (document.body.classList.contains("configure")) majResume();
 }
@@ -2298,7 +2306,8 @@ function creerCarteMaintenant(plante) {
     </div>
     <div class="cm-corps">
       <h3>${echapperHTML(plante.nom)}</h3>
-      <div class="atouts">${atoutsHTML(plante, 3, ["facile"])}</div>
+      <div class="atouts">${statutCulture(plante).statut === "experimental"
+        ? `<span class="atout experimental">${t("carte.experimental")}</span>` : ""}${atoutsHTML(plante, 3, ["facile"])}</div>
       <ul class="cm-infos">
         <li><span>🌱</span><span>${libelleMode(mode)}${deuxPoints()}<strong>${texteFenetre(plante, state.zone)}</strong></span></li>
         <li><span>🧺</span><span>${t("carte.recolte.label")}${deuxPoints()}${echapperHTML(plante.recolte)}</span></li>
@@ -2364,43 +2373,163 @@ function pourquoiHTML(plante, statut) {
       </div>`;
 }
 
+/* ---------- Deux axes indépendants : 🌺/🥔 et 🏡/🌍 ---------------------------
+   « Local éprouvé » = réussite bien établie dans les conditions locales (pas
+   « espèce d'ici »). « Exotique expérimental » = inhabituel localement mais
+   raisonnablement tentable. Les curseurs RÉORDONNENT ; ils ne filtrent jamais,
+   et une culture manifestement incompatible reste écartée (adapteeZone).
+
+   La base ne contient ni rusticité, ni température minimale, ni besoins
+   thermiques, ni retours d'expérience : le statut est déduit des SEULES données
+   présentes (catégorie éditoriale « exotique », `frileux`, zone). Les champs
+   manquants sont listés dans data.js et ne sont pas devinés ici.            */
+function statutCulture(plante, zone = state.zone) {
+  if (!adapteeZone(plante, zone)) return { statut: "incompatible" };
+  const zoneFroide = zone === "continental" || zone === "montagne";
+  const exotique = plante.cat === "exotique";
+  if (exotique && zoneFroide) return { statut: "experimental", cle: "statut.msg.exotiquefroid" };
+  if (exotique) return { statut: "possible", cle: "statut.msg.exotique" };
+  if (plante.frileux && zoneFroide) return { statut: "possible", cle: "statut.msg.frileuxfroid" };
+  return { statut: "eprouve" };
+}
+const STATUT_INFO = {
+  eprouve:      { emoji: "🟢" },
+  possible:     { emoji: "🟠" },
+  experimental: { emoji: "🧪" },
+  incompatible: { emoji: "⛔" },
+};
+
+function scoreExperimental(plante) {
+  const s = statutCulture(plante).statut;
+  return s === "experimental" ? 3 : s === "possible" ? 1.5 : 0;
+}
+function scoreNourricier(plante) {
+  const a = atoutsPlante(plante);
+  return (a.includes("nourrissant") ? 3 : 0) + (a.includes("productif") ? 2 : 0)
+    + (a.includes("conservation") ? 1 : 0) + (plante.cat === "legume" ? 1 : 0);
+}
+function scoreAgrement(plante) {
+  return ((plante.cat === "fruit" || plante.cat === "aromatique") ? 2 : 0)
+    + (plante.cat === "exotique" ? 1 : 0) + (plante.cycle === "vivace" ? 1 : 0)
+    + (plante.diff === 1 ? 0.5 : 0);
+}
+// Combinaison continue des deux axes : chaque extrémité tire le classement à elle.
+function scoreCurseurs(plante) {
+  const n = state.curseurNourricier, e = state.curseurExperimental;
+  const exp = scoreExperimental(plante);
+  return n * scoreNourricier(plante) + (1 - n) * scoreAgrement(plante)
+    + e * exp + (1 - e) * (3 - exp) * 0.5;
+}
+
+// Projection à 5 ans : affichée UNIQUEMENT si une entrée sourcée existe.
+// Tant que PROJECTIONS_CLIMAT est vide, on annonce l'absence de donnée — jamais
+// une tendance supposée, et jamais le réchauffement présenté comme favorable.
+function projectionClimat(plante, zone = state.zone) {
+  const table = typeof PROJECTIONS_CLIMAT !== "undefined" ? PROJECTIONS_CLIMAT : {};
+  const parZone = table[zone];
+  return (parZone && parZone[plante.id]) || null;
+}
+function projectionHTML(plante) {
+  const p = projectionClimat(plante);
+  if (!p) return `<span class="proj-absente">${t("horizon.indisponible")}</span>`;
+  const cle = ["favorable", "stable", "defavorable"].includes(p.tendance) ? p.tendance : "incertain";
+  return `<span class="proj-tendance proj-${cle}">${t("horizon.tendance." + cle)}</span>
+    <span class="proj-resume">${echapperHTML(p.resume || "")}</span>
+    <span class="proj-source">${t("horizon.source", {
+      source: echapperHTML(p.source || "?"), scenario: echapperHTML(p.scenario || "?"),
+      reference: echapperHTML(p.periodeReference || "?"), horizon: echapperHTML(p.horizon || "?"),
+      resolution: echapperHTML(p.resolution || "?"), maj: echapperHTML(p.miseAJour || "?"),
+      confiance: t("horizon.confiance." + (["faible", "moyenne", "elevee"].includes(p.confiance) ? p.confiance : "faible")),
+    })}</span>`;
+}
+
+// Bloc « Chez toi » de la fiche : compatibilité aujourd'hui + horizon 5 ans.
+function blocChezToiHTML(plante) {
+  const { statut, cle } = statutCulture(plante);
+  const info = STATUT_INFO[statut] || STATUT_INFO.possible;
+  return `
+      <div class="bloc bloc-chez-toi">
+        <h4>${t("statut.titre", { zone: zoneCourte() })}</h4>
+        <div class="fiche">
+          <span class="k">${t("statut.aujourdhui")}</span>
+          <span class="v">${info.emoji} ${t("statut." + statut)}</span>
+          <span class="k">${t("statut.horizon")}</span>
+          <span class="v proj-valeur">${projectionHTML(plante)}</span>
+        </div>
+        ${cle ? `<p class="statut-message">${t(cle)}</p>` : ""}
+        <p class="pq-note">${t("statut.note")}</p>
+      </div>`;
+}
+
 // Question facultative, posée seulement une fois des résultats affichés.
-function rendreObjectif(aDesResultats) {
+function rendrePreferences(aDesResultats) {
   const section = $("#section-objectif");
   if (!section) return;
   const edition = state._objectifEdition === true;
-  if (!aDesResultats || (!state.objectif && state.objectifMasque && !edition)) {
-    section.hidden = true;
-    return;
-  }
+  if (!aDesResultats) { section.hidden = true; return; }
   section.hidden = false;
-  if (state.objectif && !edition) {
-    section.innerHTML = `<div class="objectif-compact">
-      <span>${t("objectif.actif", { label: t("objectif." + state.objectif) })}</span>
-      <button type="button" class="lien-discret" id="objectif-changer">${t("objectif.changer")}</button></div>`;
-    $("#objectif-changer").addEventListener("click", () => { state._objectifEdition = true; rendreObjectif(true); });
-    return;
-  }
+
+  const questionObjectif = (!state.objectif && !state.objectifMasque) || edition;
+  const curseur = (id, cle, valeur, gauche, droite) => `
+    <div class="curseur">
+      <label for="${id}">${t(cle)}</label>
+      <div class="curseur-ligne">
+        <span class="curseur-bout">${gauche}</span>
+        <input type="range" id="${id}" min="0" max="100" step="5" value="${Math.round(valeur * 100)}" />
+        <span class="curseur-bout">${droite}</span>
+      </div>
+      <span class="curseur-valeur" id="${id}-valeur">${t(niveauCurseur(valeur, cle))}</span>
+    </div>`;
+
   section.innerHTML = `<div class="objectif-carte">
-    <h3>${t("objectif.titre")}</h3>
-    <p>${t("objectif.sous")}</p>
-    <div class="objectif-choix">${Object.keys(OBJECTIFS).map(k =>
-      `<button type="button" data-objectif="${k}" class="${state.objectif === k ? "actif" : ""}">${t("objectif." + k)}</button>`).join("")}</div>
-    <button type="button" class="lien-discret" id="objectif-passer">${state.objectif ? t("objectif.aucun") : t("objectif.passer")}</button>
+    ${questionObjectif ? `<h3>${t("objectif.titre")}</h3><p>${t("objectif.sous")}</p>
+      <div class="objectif-choix">${Object.keys(OBJECTIFS).map(k =>
+        `<button type="button" data-objectif="${k}" class="${state.objectif === k ? "actif" : ""}">${t("objectif." + k)}</button>`).join("")}</div>
+      <button type="button" class="lien-discret" id="objectif-passer">${state.objectif ? t("objectif.aucun") : t("objectif.passer")}</button>`
+    : `<div class="objectif-compact">
+        <span>${state.objectif ? t("objectif.actif", { label: t("objectif." + state.objectif) }) : t("objectif.aucune")}</span>
+        <button type="button" class="lien-discret" id="objectif-changer">${t("objectif.changer")}</button></div>`}
+    <div class="curseurs">
+      ${curseur("curseur-nourricier", "curseur.nourricier", state.curseurNourricier, "🌺", "🥔")}
+      ${curseur("curseur-experimental", "curseur.experimental", state.curseurExperimental, "🏡", "🌍")}
+      <p class="curseurs-note">${t("curseur.note")}</p>
+    </div>
   </div>`;
+
+  const brancherCurseur = (id, champ) => {
+    const input = $("#" + id);
+    if (!input) return;
+    input.addEventListener("input", () => {
+      state[champ] = Number(input.value) / 100;
+      const v = $("#" + id + "-valeur");
+      if (v) v.textContent = t(niveauCurseur(state[champ], id === "curseur-nourricier" ? "curseur.nourricier" : "curseur.experimental"));
+    });
+    input.addEventListener("change", () => { sauverPreferencesJardin(); rendre(); });
+  };
+  brancherCurseur("curseur-nourricier", "curseurNourricier");
+  brancherCurseur("curseur-experimental", "curseurExperimental");
+  const changer = $("#objectif-changer");
+  if (changer) changer.addEventListener("click", () => { state._objectifEdition = true; rendrePreferences(true); });
   section.querySelectorAll("[data-objectif]").forEach(b => b.addEventListener("click", () => {
     state.objectif = b.dataset.objectif;
     state._objectifEdition = false;
     sauverPreferencesJardin();
     rendre();
   }));
-  $("#objectif-passer").addEventListener("click", () => {
+  const passer = $("#objectif-passer");
+  if (passer) passer.addEventListener("click", () => {
     state.objectif = null;
     state.objectifMasque = true;
     state._objectifEdition = false;
     sauverPreferencesJardin();
     rendre();
   });
+}
+
+// Libellé du niveau d'un curseur (« plutôt nourricier », « équilibré »…)
+function niveauCurseur(valeur, cle) {
+  const i = valeur <= 0.2 ? 0 : valeur <= 0.4 ? 1 : valeur < 0.6 ? 2 : valeur < 0.8 ? 3 : 4;
+  return `${cle}.niveau${i}`;
 }
 
 // « Tu veux optimiser leur emplacement ? » : dès la 1re culture ajoutée, tant

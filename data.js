@@ -680,3 +680,36 @@ const ATOUTS_EDITORIAUX = {
 // Format : { tomate: { min: 4, max: 8, unite: "kg/m²", source: "Référence, année" } }
 const RENDEMENTS_SOURCES = {};
 
+// --- Projections climatiques locales : VIDE tant qu'aucune source n'est branchée ---
+// Règle : aucune projection inventée. Une recommandation ne peut être modifiée par
+// une tendance climatique que si l'entrée porte sa traçabilité complète.
+// Le réchauffement n'est JAMAIS présumé favorable : une culture exigeant du froid
+// hivernal peut devenir moins adaptée (`tendance: "defavorable"`).
+// Format attendu, par zone puis par culture :
+// PROJECTIONS_CLIMAT.continental["patate-douce"] = {
+//   tendance: "favorable" | "stable" | "defavorable" | "incertain",
+//   confiance: "faible" | "moyenne" | "elevee",
+//   resume: "L'allongement attendu de la saison chaude pourrait améliorer…",
+//   facteurs: ["saison sans gel", "jours chauds"],   // indicateurs réellement utilisés
+//   source: "DRIAS / Météo-France",
+//   scenario: "SSP2-4.5",
+//   periodeReference: "1991-2020",
+//   horizon: "2031-2040",
+//   resolution: "8 km",
+//   miseAJour: "2026-01",
+// };
+// Indicateurs visés (jamais réduits à la température moyenne) : températures
+// moyennes, minimales hivernales, dates de dernière et première gelée, durée de
+// saison sans gel, jours chauds, vagues de chaleur, sécheresse estivale,
+// disponibilité en eau, précipitations et saisonnalité, besoins en froid,
+// humidité, événements extrêmes.
+const PROJECTIONS_CLIMAT = {};
+
+// --- Données agronomiques par culture : à remplir, jamais à deviner -----------------
+// Champs prévus pour affiner « éprouvé / possible / expérimental » : rusticite (zone
+// USDA ou °C mini), tempMin, saisonChaudeJours, besoinsThermiques, abriPossible,
+// demarrageInterieur, retoursLocaux (nombre de réussites rapportées par zone).
+// Tant qu'un champ manque, le statut est déduit des seules données présentes
+// (catégorie, `frileux`, zone) — cf. statutCulture() dans app.js.
+
+
