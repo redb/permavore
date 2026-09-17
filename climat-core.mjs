@@ -21,6 +21,32 @@
 
 /* ---------- définitions des indicateurs (affichées à l'utilisateur) ------- */
 
+/*
+   Version du MOTEUR climatique. Elle entre dans la clé de cache : la changer
+   invalide naturellement tous les profils calculés, et elle ne doit donc
+   changer que lorsque le CALCUL change — jamais pour une correction de style
+   ou de texte, qui ne doit provoquer aucun nouvel appel à la source.
+*/
+export const VERSION_MOTEUR_CLIMAT = 2;
+
+/**
+ * Clé de cache d'un profil climatique. Elle décrit exactement ce qui a servi
+ * à le produire : maille, version du moteur, fenêtres, modèles et variables.
+ * Deux profils portant la même clé sont interchangeables ; dès qu'un de ces
+ * éléments bouge, la clé change et l'ancien profil cesse d'être réutilisé.
+ */
+export function cleCacheClimat({ maille, version = VERSION_MOTEUR_CLIMAT,
+                                 fenetreObservee, fenetreFuture, modeles = [], variables = [] }) {
+  return [
+    "c", version,
+    maille,
+    fenetreObservee || "?",
+    fenetreFuture || "?",
+    [...modeles].sort().join("+") || "-",
+    [...variables].sort().join("+") || "-",
+  ].join("|");
+}
+
 export const DEFINITIONS = {
   minimumHivernal:
     "Moyenne, sur les années disponibles, de la température la plus basse de chaque année climatique. C'est la définition employée par l'USDA pour ses zones de rusticité.",

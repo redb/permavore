@@ -24,11 +24,17 @@ import {
 } from "./sauvegarde-core.mjs";
 
 const NOM_BASE = "permavore-jardin";
-const VERSION_BASE = 1;
+const VERSION_BASE = 2;   // v2 : ajout du magasin de cache climatique
 const MAGASIN_ETAT = "etat";            // clé → valeur, le jardin lui-même
 const MAGASIN_META = "meta";            // version de schéma, horodatages
 const MAGASIN_JOURNAL = "journal";      // ce qui a changé, pour la synchro future
 const MAGASIN_SAUVEGARDES = "sauvegardes";  // filets avant opération risquée
+/*
+   Cache climatique — strictement séparé des données du jardin. Il peut être
+   vidé à tout moment sans qu'un jardinier perde quoi que ce soit : ce n'est
+   pas sa donnée, c'est un calcul reproductible.
+*/
+const MAGASIN_CLIMAT = "climat";
 
 let basePromesse = null;
 
@@ -48,6 +54,9 @@ function ouvrir() {
       if (!db.objectStoreNames.contains(MAGASIN_SAUVEGARDES)) {
         db.createObjectStore(MAGASIN_SAUVEGARDES, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(MAGASIN_CLIMAT)) {
+        db.createObjectStore(MAGASIN_CLIMAT);      // clé = cleCacheClimat
+      }
     };
     req.onsuccess = () => resoudre(req.result);
     req.onerror = () => rejeter(req.error || new Error("ouverture_impossible"));
@@ -64,8 +73,16 @@ async function avecMagasin(nom, mode, action) {
   const db = await ouvrir();
   return new Promise((resoudre, rejeter) => {
     const tx = db.transaction(nom, mode);
-    const resultat = action(tx.objectStore(nom));
-    tx.oncomplete = () => resoudre(resultat && resultat.then ? undefined : resultat);
+    let resultat;
+    try { resultat = action(tx.objectStore(nom)); }
+    catch (e) { rejeter(e); return; }
+    // Quand l'action renvoie une promesse (une lecture), c'est SA valeur qui
+    // compte. La version précédente la jetait, ce qui vidait silencieusement
+    // toutes les lectures — cache climatique et version de schéma compris.
+    tx.oncomplete = () => {
+      if (resultat && typeof resultat.then === "function") resultat.then(resoudre, rejeter);
+      else resoudre(resultat);
+    };
     tx.onerror = () => rejeter(tx.error);
     tx.onabort = () => rejeter(tx.error || new Error("transaction_annulee"));
   });
@@ -89,8 +106,7 @@ export async function lireEtat() {
     tx.oncomplete = ok; tx.onerror = () => ko(tx.error);
   });
   const meta = await avecMagasin(MAGASIN_META, "readonly", s => promesse(s.get("schema")));
-  const version = await meta;
-  return { schemaVersion: (version && version.schemaVersion) || 0, donnees, anomalies: [] };
+  return { schemaVersion: (meta && meta.schemaVersion) || 0, donnees, anomalies: [] };
 }
 
 export async function ecrireEtat(etat) {
@@ -116,8 +132,7 @@ export async function sauvegardeSecurite(motif) {
   await avecMagasin(MAGASIN_SAUVEGARDES, "readwrite", s => { s.put(entree); });
   // On garde les cinq dernières : assez pour revenir en arrière, pas assez
   // pour saturer le quota du navigateur.
-  const toutes = await avecMagasin(MAGASIN_SAUVEGARDES, "readonly", s => promesse(s.getAll()));
-  const liste = await toutes;
+  const liste = await avecMagasin(MAGASIN_SAUVEGARDES, "readonly", s => promesse(s.getAll()));
   if (Array.isArray(liste) && liste.length > 5) {
     const aSupprimer = liste.sort((a, b) => a.cree.localeCompare(b.cree)).slice(0, liste.length - 5);
     await avecMagasin(MAGASIN_SAUVEGARDES, "readwrite", s => aSupprimer.forEach(x => s.delete(x.id)));
@@ -126,8 +141,7 @@ export async function sauvegardeSecurite(motif) {
 }
 
 export async function sauvegardes() {
-  const liste = await avecMagasin(MAGASIN_SAUVEGARDES, "readonly", s => promesse(s.getAll()));
-  const tout = await liste;
+  const tout = await avecMagasin(MAGASIN_SAUVEGARDES, "readonly", s => promesse(s.getAll()));
   return (Array.isArray(tout) ? tout : []).sort((a, b) => b.cree.localeCompare(a.cree));
 }
 
@@ -140,6 +154,51 @@ export async function restaurerSauvegarde(id) {
   return true;
 }
 
+/* ---------- cache climatique --------------------------------------------- */
+
+export async function lireClimatCache(cle) {
+  try {
+    return (await avecMagasin(MAGASIN_CLIMAT, "readonly", s => promesse(s.get(cle)))) || null;
+  } catch { return null; }
+}
+
+export async function ecrireClimatCache(cle, entree) {
+  try { await avecMagasin(MAGASIN_CLIMAT, "readwrite", s => { s.put(entree, cle); }); return true; }
+  catch { return false; }
+}
+
+/**
+ * Dernière entrée connue pour une maille, quelle que soit la version du
+ * moteur. Sert de repli « périmé mais exploitable » quand la source est
+ * indisponible : mieux vaut un profil daté qu'aucun profil.
+ */
+export async function dernierClimatPourMaille(maille) {
+  try {
+    const db = await ouvrir();
+    return await new Promise((ok, ko) => {
+      const tx = db.transaction(MAGASIN_CLIMAT, "readonly");
+      const store = tx.objectStore(MAGASIN_CLIMAT);
+      const req = store.openCursor();
+      let meilleur = null;
+      req.onsuccess = () => {
+        const c = req.result;
+        if (!c) return;
+        if (c.value && c.value.maille === maille) {
+          if (!meilleur || String(c.value.dateCalcul) > String(meilleur.dateCalcul)) meilleur = c.value;
+        }
+        c.continue();
+      };
+      tx.oncomplete = () => ok(meilleur);
+      tx.onerror = () => ko(tx.error);
+    });
+  } catch { return null; }
+}
+
+export async function viderClimatCache() {
+  try { await avecMagasin(MAGASIN_CLIMAT, "readwrite", s => { s.clear(); }); return true; }
+  catch { return false; }
+}
+
 /* ---------- journal ------------------------------------------------------ */
 
 export async function journaliser(entree) {
@@ -148,8 +207,7 @@ export async function journaliser(entree) {
 }
 
 export async function journal(limite = 200) {
-  const liste = await avecMagasin(MAGASIN_JOURNAL, "readonly", s => promesse(s.getAll()));
-  const tout = await liste;
+  const tout = await avecMagasin(MAGASIN_JOURNAL, "readonly", s => promesse(s.getAll()));
   return (Array.isArray(tout) ? tout : []).slice(-limite);
 }
 
