@@ -501,6 +501,12 @@ function ouvrirEnracinement(cultureId) {
         </div>
         <details class="enr-details">
           <summary>${t("enr.details")}</summary>
+          <label class="enr-label" for="enr-environnement">${t("enr.ou")}</label>
+          <select id="enr-environnement">
+            ${["pleine_terre", "pot_exterieur", "tunnel", "serre_froide", "serre_chauffee",
+               "veranda", "interieur", "pot_mobile"]
+              .map(e => `<option value="${e}">${t("env." + e)}</option>`).join("")}
+          </select>
           <label class="enr-label" for="enr-emplacement">${t("enr.emplacement")}</label>
           <input type="text" id="enr-emplacement" maxlength="80" />
           <label class="enr-label" for="enr-surface">${t("enr.surface")}</label>
@@ -544,6 +550,7 @@ function ouvrirEnracinement(cultureId) {
     window.Instances.enraciner(cultureId, {
       etat: etatChoisi || "plante",
       depuis: { precision, valeur },
+      environnement: p.querySelector("#enr-environnement")?.value || "pleine_terre",
       emplacement: p.querySelector("#enr-emplacement")?.value.trim() || null,
       surface: lire("#enr-surface"),
       quantite: lire("#enr-quantite"),
@@ -2743,14 +2750,26 @@ function tendanceHTML(plante) {
     ${detailCompatibiliteHTML(compat, tend)}`;
 }
 
-/** Statut « éprouvé / expérimental » — relatif au lieu, jamais à une origine. */
+/**
+ * Deux informations distinctes, jamais fondues en une seule :
+ *   — la compatibilité : peut-on la cultiver ici ?
+ *   — le statut local : sa réussite ici est-elle établie ?
+ * Un statut local indéterminé ne s'affiche pas comme un badge « expérimental ».
+ */
 function statutAgroHTML(plante) {
   const profil = profilCulture(plante);
   if (profil && climatPret() && window.Climat.statut() === "pret") {
-    const compat = window.Climat.compatibilite(profil, plante.id);
-    if (compat && compat.statut !== "nonEvalue") {
-      const emoji = { eprouve: "🏡", experimental: "🧪", incompatible: "🚫" }[compat.statut] || "•";
-      return `${emoji} ${t("agro.statut." + compat.statut)}`;
+    const c = window.Climat.compatibilite(profil, plante.id);
+    if (c && c.dimensionsDocumentees > 0) {
+      const emojiCompat = { compatible: "✅", incompatible: "🚫", indeterminee: "❔" }[c.compatibilite];
+      let ligne = `${emojiCompat} ${t("agro.compat." + c.compatibilite)}`;
+      if (c.statutLocal === "eprouve") ligne += ` <span class="agro-badge">🏡 ${t("agro.statut.eprouve")}</span>`;
+      else if (c.statutLocal === "experimental") ligne += ` <span class="agro-badge">🧪 ${t("agro.statut.experimental")}</span>`;
+      ligne += `<em class="agro-reserve">${t("agro.confiance." + c.confiance)}`;
+      if (c.statutLocal === "indetermine") ligne += ` · ${t("agro.statut.indetermine")}`;
+      if (c.gardeeEnPlace === false && profil.rusticite) ligne += ` · ${t("agro.annuelle")}`;
+      ligne += `</em>`;
+      return ligne;
     }
   }
   // Repli : appréciation qualitative héritée, annoncée comme telle.

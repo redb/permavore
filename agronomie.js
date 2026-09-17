@@ -14,7 +14,17 @@
      { valeur, unite, source, url, annee, confiance: "haute"|"moyenne"|"basse", note }
 
    Dimensions reconnues par le moteur :
-     perenne                          la culture passe-t-elle l'hiver en place
+     cultiveeComme                    "annuelle" ou "perenne" — MODE DE CULTURE,
+                                      pas biologie de l'espèce. Une vivace
+                                      tropicale menée en annuelle est
+                                      "annuelle" : sa rusticité ne décide alors
+                                      pas de sa culture ici.
+     chaleur.joursMinAuDessus         nombre de jours au-dessus de
+                                      seuilMinCroissance réellement exigé, S'IL
+                                      EST SOURCÉ. Sans lui, le besoin thermique
+                                      est documenté mais non quantifiable :
+                                      le moteur le dit et ne conclut pas.
+     perenne                          (hérité) la culture passe-t-elle l'hiver en place
      rusticite.tempMinTolere          °C, minimum hivernal supporté
      cycle.saisonSansGelMin           jours sans gel nécessaires
      cycle.degresJours10Min           degrés-jours base 10 jusqu'à récolte
@@ -37,7 +47,10 @@ const PROFILS_AGROCLIMATIQUES = {
      (les valeurs qui circulent viennent de sources secondaires non ouvrables),
      et besoin hydrique en climat tempéré. */
   "patate-douce": {
-    perenne: false,
+    // Vivace tropicale à l'origine, menée en annuelle sous climat tempéré : elle
+    // n'a pas besoin de survivre à l'hiver pour produire. Sa rusticité ne décide
+    // donc PAS de sa culture ici.
+    cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 120, unite: "jours", confiance: "haute",
         source: "Clemson Cooperative Extension (HGIC), Sweetpotato",
@@ -66,7 +79,7 @@ const PROFILS_AGROCLIMATIQUES = {
      Le seuil qui compte n'est pas la survie de la plante mais la NOUAISON :
      le pollen devient non viable bien avant que la plante ne souffre. */
   "tomate": {
-    perenne: false,
+    cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 100, unite: "jours", confiance: "haute",
         source: "FAO Land & Water, Crop Information — Tomato (d'après Irrigation and Drainage Paper 33)",
@@ -93,7 +106,7 @@ const PROFILS_AGROCLIMATIQUES = {
      CROISSANCE (seuil haut). Les deux sont documentés, le moteur n'exploite
      aujourd'hui que le second. */
   "pomme-de-terre": {
-    perenne: false,
+    cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 120, unite: "jours", confiance: "haute",
         source: "FAO Land & Water, Crop Information — Potato",
@@ -126,7 +139,7 @@ const PROFILS_AGROCLIMATIQUES = {
      11 à 27 °C selon les sources de la WSU elle-même, donc l'inscrire ici
      reviendrait à fabriquer un seuil. */
   "pommier": {
-    perenne: true,
+    cultiveeComme: "perenne", perenne: true,
     froidHivernal: {
       heuresFroidMin: { valeur: 700, unite: "heures sous 7,2 °C", confiance: "moyenne",
         source: "CTIFL — réseau Besoins en froid, fruits à pépins",
@@ -146,7 +159,7 @@ const PROFILS_AGROCLIMATIQUES = {
      donc vide, et l'application affiche « projection non disponible ».
      Introuvable également : tout seuil de stress thermique estival chiffré. */
   "cassis": {
-    perenne: true,
+    cultiveeComme: "perenne", perenne: true,
     rusticite: {
       tempMinTolere: { valeur: -24, unite: "°C", confiance: "haute",
         source: "Pagter, Andersen & Andersen, Aarhus University, AoB Plants",

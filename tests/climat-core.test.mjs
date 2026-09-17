@@ -95,8 +95,9 @@ test("une valeur sans source n'est jamais exploitée", () => {
 test("une culture trop peu documentée n'est pas classée", () => {
   const lieu = profilClimatique(serie(), 45);
   const r = compatibiliteActuelle({ cycle: { saisonSansGelMin: source(100, "jours") } }, lieu);
-  assert.equal(r.statut, "nonEvalue");
   assert.equal(r.dimensionsDocumentees, 1);
+  assert.equal(r.statutLocal, "indetermine", "une seule dimension ne démontre rien");
+  assert.equal(r.confiance, "faible");
 });
 
 test("une saison trop courte rend la culture incompatible, pas « expérimentale »", () => {
@@ -104,15 +105,19 @@ test("une saison trop courte rend la culture incompatible, pas « expérimentale
   const culture = { cycle: { saisonSansGelMin: source(200, "jours"),
                              degresJours10Min: source(2000, "dj") } };
   const r = compatibiliteActuelle(culture, froid);
-  assert.equal(r.statut, "incompatible");
+  assert.equal(r.compatibilite, "incompatible");
+  assert.equal(r.faisabiliteCycleAnnuel, "impossible");
   assert.equal(r.dimensions.cycle.etat, "defavorable");
+  assert.equal(r.statutLocal, "indetermine", "incompatible n'est pas « expérimental »");
 });
 
 test("éprouvé se juge sur le lieu, pas sur l'origine de la plante", () => {
   const doux = profilClimatique(serie({ tmoy: 16, amplitude: 8 }), 40);
   const exotique = { cycle: { saisonSansGelMin: source(120, "jours"),
                               degresJours10Min: source(1200, "dj") } };
-  assert.equal(compatibiliteActuelle(exotique, doux).statut, "eprouve");
+  const r = compatibiliteActuelle(exotique, doux);
+  assert.equal(r.compatibilite, "compatible");
+  assert.equal(r.statutLocal, "eprouve");
 });
 
 test("un écart plus petit que la variabilité locale n'est pas une tendance", () => {
@@ -181,10 +186,15 @@ test("une exigence documentée mais non mesurable interdit le classement « épr
     eau: { sensibiliteDeficit: source(1, "1-3") },
   };
   const r = compatibiliteActuelle(culture, tempere);
-  assert.equal(r.statut, "experimental");
+  assert.equal(r.compatibilite, "compatible", "le cycle est faisable");
+  assert.equal(r.statutLocal, "indetermine", "ne pas savoir n'est pas « expérimental »");
   assert.equal(r.dimensions.besoinChaleur.etat, "inconnu");
-  assert.equal(r.dimensions.besoinChaleur.nonEvaluable, true);
+  assert.equal(r.dimensions.besoinChaleur.quantifiable, false);
   assert.equal(r.dimensions.cycle.etat, "favorable", "le gel n'est pas le facteur limitant");
+  // Trois dimensions documentées, mais l'une n'est pas quantifiable : la
+  // confiance ne peut pas être « haute », sans tomber pour autant au plus bas.
+  assert.notEqual(r.confiance, "haute");
+  assert.equal(r.confiance, "moyenne");
 });
 
 test("le retour d'un jardinier du coin tranche ce que les seuils laissent ouvert", () => {
@@ -197,14 +207,19 @@ test("le retour d'un jardinier du coin tranche ce que les seuils laissent ouvert
     chaleur: { seuilMinCroissance: source(25, "°C") },
     eau: { sensibiliteDeficit: source(1, "1-3") },
   };
-  assert.equal(compatibiliteActuelle(culture, tempere).statut, "experimental");
-
+  // Un retour isolé « ça pousse » renseigne la faisabilité et remonte la
+  // confiance, mais ne démontre pas une réussite régulière.
   const retour = [{ resultat: "pousse", distance: 3, annee: 2026,
     lieu: { nom: "Rumilly" }, source: "un jardinier", confiance: "haute" }];
   const avec = compatibiliteActuelle(culture, tempere, retour);
-  assert.equal(avec.statut, "eprouve");
+  assert.equal(avec.compatibilite, "compatible");
+  assert.equal(avec.statutLocal, "indetermine");
   assert.equal(avec.dimensions.retourLocal.positif, true);
   assert.equal(avec.contradiction, false);
+
+  // Trois retours concordants, eux, démontrent quelque chose.
+  const trois = [0, 1, 2].map(i => ({ ...retour[0], distance: 3 + i }));
+  assert.equal(compatibiliteActuelle(culture, tempere, trois).statutLocal, "eprouve");
 });
 
 test("un retour positif ne masque pas un seuil bloquant : il le met en doute", () => {
@@ -215,7 +230,7 @@ test("un retour positif ne masque pas un seuil bloquant : il le met en doute", (
   const retour = [{ resultat: "recolte", distance: 5, annee: 2026,
     lieu: { nom: "quelque part" }, source: "un jardinier", confiance: "haute" }];
   const r = compatibiliteActuelle(culture, froid, retour);
-  assert.equal(r.statut, "incompatible", "le seuil bloquant reste affiché");
+  assert.equal(r.compatibilite, "incompatible", "le seuil bloquant reste affiché");
   assert.equal(r.contradiction, true, "mais la contradiction est signalée");
 });
 
@@ -223,8 +238,144 @@ test("un échec rapporté sur place empêche le classement « éprouvé »", () 
   const doux = profilClimatique(serie({ tmoy: 16, amplitude: 8 }), 40);
   const culture = { cycle: { joursMaturite: source(120, "jours"),
                              degresJours10Min: source(1200, "dj") } };
-  assert.equal(compatibiliteActuelle(culture, doux).statut, "eprouve");
+  assert.equal(compatibiliteActuelle(culture, doux).statutLocal, "eprouve");
   const echec = [{ resultat: "echec", distance: 2, annee: 2026,
     lieu: { nom: "ici" }, source: "un jardinier", confiance: "haute" }];
-  assert.equal(compatibiliteActuelle(culture, doux, echec).statut, "experimental");
+  const r = compatibiliteActuelle(culture, doux, echec);
+  assert.equal(r.statutLocal, "experimental", "un échec sur place retire « éprouvé »");
+  assert.equal(r.compatibilite, "compatible", "sans rendre la culture impossible");
 });
+
+/* ---------------------------------------------------------------------------
+   Les six cas conceptuels : ne jamais confondre rusticité, tolérance à la
+   chaleur, besoin de chaleur, durée de cycle, besoin en froid, faisabilité
+   annuelle, survie vivace, niveau de confiance et statut local.
+   --------------------------------------------------------------------------- */
+
+const climatTempere = () => profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+
+test("CAS 1 — une vivace tropicale menée en annuelle n'est pas jugée sur sa rusticité", () => {
+  const lieu = climatTempere();
+  const culture = {
+    cultiveeComme: "annuelle",
+    rusticite: { tempMinTolere: source(10, "°C") },   // ne survivrait jamais à l'hiver
+    cycle: { joursMaturite: source(120, "jours") },
+    eau: { sensibiliteDeficit: source(1, "1-3") },
+  };
+  const r = compatibiliteActuelle(culture, lieu);
+  assert.equal(r.compatibilite, "compatible");
+  assert.equal(r.survieVivaceAuFroid, "sansObjet");
+  assert.equal(r.dimensions.rusticite, undefined, "la rusticité ne doit pas être évaluée");
+});
+
+test("CAS 2 — un besoin thermique non quantifiable donne « indéterminé », pas « expérimental »", () => {
+  const lieu = climatTempere();
+  const culture = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(120, "jours") },
+    chaleur: { seuilMinCroissance: source(25, "°C") },   // sans joursMinAuDessus
+  };
+  const r = compatibiliteActuelle(culture, lieu);
+  assert.equal(r.dimensions.besoinChaleur.quantifiable, false);
+  assert.notEqual(r.statutLocal, "experimental", "l'ignorance n'est pas une propriété agronomique");
+  assert.equal(r.statutLocal, "indetermine");
+  assert.equal(r.compatibilite, "compatible", "le cycle reste faisable");
+});
+
+test("CAS 3 — un besoin quantifié tout juste atteint peut donner « expérimental »", () => {
+  const lieu = climatTempere();
+  const dispo = lieu.joursAuDessus[25];
+  const culture = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(120, "jours") },
+    chaleur: { seuilMinCroissance: source(25, "°C"),
+               joursMinAuDessus: source(Math.round(dispo * 0.9), "jours") },
+  };
+  const r = compatibiliteActuelle(culture, lieu);
+  assert.equal(r.dimensions.besoinChaleur.etat, "limite");
+  assert.equal(r.statutLocal, "experimental");
+  assert.equal(r.compatibilite, "compatible");
+});
+
+test("CAS 4 — conditions largement suffisantes : compatible, et « éprouvé » justifié", () => {
+  const lieu = climatTempere();
+  const culture = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(80, "jours"), degresJours10Min: source(600, "dj") },
+  };
+  const r = compatibiliteActuelle(culture, lieu);
+  assert.equal(r.compatibilite, "compatible");
+  assert.equal(r.statutLocal, "eprouve");
+  assert.equal(r.dimensions.cycle.etat, "favorable");
+});
+
+test("CAS 5 — une vivace qui ne survit pas à l'hiver local est incompatible EN VIVACE", () => {
+  const lieu = climatTempere();
+  const culture = {
+    cultiveeComme: "perenne",
+    rusticite: { tempMinTolere: source(5, "°C") },
+    cycle: { joursMaturite: source(120, "jours") },
+  };
+  const r = compatibiliteActuelle(culture, lieu);
+  assert.equal(r.compatibilite, "incompatible");
+  assert.equal(r.survieVivaceAuFroid, "impossible");
+});
+
+test("CAS 6 — la même espèce menée en annuelle est réévaluée, pas condamnée d'office", () => {
+  const lieu = climatTempere();
+  const commeVivace = { cultiveeComme: "perenne",
+    rusticite: { tempMinTolere: source(5, "°C") },
+    cycle: { joursMaturite: source(120, "jours") } };
+  const commeAnnuelle = { ...commeVivace, cultiveeComme: "annuelle" };
+  assert.equal(compatibiliteActuelle(commeVivace, lieu).compatibilite, "incompatible");
+  assert.equal(compatibiliteActuelle(commeAnnuelle, lieu).compatibilite, "compatible");
+});
+
+test("un seul retour « ça pousse » ne suffit pas à démontrer « éprouvé »", () => {
+  const lieu = climatTempere();
+  const culture = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(120, "jours") },
+    chaleur: { seuilMinCroissance: source(25, "°C") },
+  };
+  const unRetour = [{ resultat: "pousse", distance: 5, annee: 2026,
+    lieu: { nom: "Rumilly" }, source: "un jardinier", confiance: "haute" }];
+  const r = compatibiliteActuelle(culture, lieu, unRetour);
+  assert.equal(r.compatibilite, "compatible");
+  assert.equal(r.statutLocal, "indetermine", "« pousse » n'est pas « réussit régulièrement »");
+  assert.equal(r.confiance, "moyenne");
+
+  const reguliere = [{ ...unRetour[0], resultat: "recolteReguliere" }];
+  assert.equal(compatibiliteActuelle(culture, lieu, reguliere).statutLocal, "eprouve");
+});
+
+test("un abri dont on ne sait rien ne rend jamais le verdict meilleur", async () => {
+  const { environnementCulture, profilSousEnvironnement } = await chargerEnvironnements();
+  const lieu = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+
+  const dehors = profilSousEnvironnement(lieu, environnementCulture("pleine_terre"));
+  assert.equal(dehors.connu, true);
+  assert.equal(dehors.profil.saisonSansGel, lieu.saisonSansGel);
+
+  const serreInconnue = profilSousEnvironnement(lieu, environnementCulture("serre_froide"));
+  assert.equal(serreInconnue.connu, false, "aucun bonus supposé");
+  assert.equal(serreInconnue.profil, null);
+  assert.equal(serreInconnue.raison, "abri_non_caracterise");
+
+  // Le jardinier déclare que sa serre ne descend pas sous 2 °C : on n'utilise
+  // que cela, et rien d'autre — pas de gain de chaleur estivale inventé.
+  const serreDeclaree = profilSousEnvironnement(lieu,
+    environnementCulture("serre_froide", { temperatureMinConnue: 2 }));
+  assert.equal(serreDeclaree.connu, true);
+  assert.equal(serreDeclaree.profil.sansGelToutelAnnee, true);
+  assert.equal(serreDeclaree.profil.joursChauds, lieu.joursChauds, "l'été n'est pas modifié");
+});
+
+async function chargerEnvironnements() {
+  const { readFileSync } = await import("node:fs");
+  const vm = await import("node:vm");
+  const ctx = { window: {} };
+  vm.createContext(ctx);
+  vm.runInContext(readFileSync(new URL("../environnements.js", import.meta.url), "utf8"), ctx);
+  return ctx.window.Environnements;
+}

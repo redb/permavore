@@ -91,10 +91,25 @@ function retoursLocaux(cultureId) {
   return window.RetoursLocaux.retoursPour(cultureId, l.latitude, l.longitude);
 }
 
-/** Compatibilité actuelle d'une culture — null si le lieu n'est pas connu. */
-function compatibilite(culture, cultureId) {
+/**
+ * Compatibilité d'une culture DANS UN ENVIRONNEMENT donné (pleine terre par
+ * défaut). Un abri dont on ne sait rien ne rend jamais le verdict meilleur :
+ * il le rend indéterminé, et la raison est renvoyée telle quelle.
+ */
+function compatibilite(culture, cultureId, typeEnvironnement = "pleine_terre", declare = {}) {
   const p = profil();
-  return (p && culture) ? compatibiliteActuelle(culture, p, retoursLocaux(cultureId)) : null;
+  if (!p || !culture) return null;
+  const env = window.Environnements
+    ? window.Environnements.environnementCulture(typeEnvironnement, declare) : null;
+  const sous = window.Environnements
+    ? window.Environnements.profilSousEnvironnement(p, env) : { profil: p, connu: true };
+  if (!sous.connu) {
+    return { compatibilite: "indeterminee", statutLocal: "indetermine", confiance: "faible",
+      dimensions: {}, dimensionsDocumentees: 0, contradiction: false,
+      environnement: env, raison: sous.raison };
+  }
+  const r = compatibiliteActuelle(culture, sous.profil, retoursLocaux(cultureId));
+  return { ...r, environnement: env };
 }
 
 /** Tendance à +5 ans — « indisponible » tant que tout n'est pas réuni. */

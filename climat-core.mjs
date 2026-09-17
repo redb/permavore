@@ -420,6 +420,12 @@ export function valeurUtilisable(v) {
   return !!v && Number.isFinite(v.valeur) && typeof v.source === "string" && v.source.length > 0;
 }
 
+/*
+   Marge de confort. Attention : ce n'est PAS une valeur agronomique sourcée,
+   c'est une politique de prudence assumée du moteur — « tenir tout juste » n'est
+   pas « tenir confortablement ». Elle ne crée jamais un seuil : elle nuance un
+   seuil déjà sourcé, et elle est la même pour toutes les cultures.
+*/
 const etatDepuisMarges = (valeurLieu, requis, margeConfort) => {
   if (valeurLieu >= requis + margeConfort) return "favorable";
   if (valeurLieu >= requis) return "limite";
@@ -430,151 +436,239 @@ const etatDepuisMarges = (valeurLieu, requis, margeConfort) => {
  * Compatibilité d'une culture avec un lieu, dimension par dimension.
  * `profilLieu` : sortie de profilClimatique(). `culture` : profil agronomique.
  */
+/*
+   Trois axes ORTHOGONAUX, qu'il ne faut jamais confondre :
+
+     compatibilite  « cette culture peut-elle accomplir ici un cycle
+                      productif ? »  → compatible | incompatible | indeterminee
+     statutLocal    « sa réussite ici est-elle établie ? »
+                      → eprouve | experimental | indetermine
+     confiance      « que vaut ce que nous savons ? » → haute | moyenne | faible
+
+   Règle cardinale : UNE DONNÉE MANQUANTE N'EST PAS UNE PROPRIÉTÉ AGRONOMIQUE.
+   Ne pas savoir ne rend pas une culture expérimentale : cela la rend
+   indéterminée. « Expérimental » décrit une relation réelle entre une culture
+   et un lieu — marginale mais plausible — et réclame donc des éléments
+   POSITIFS, pas un trou dans la base.
+
+   Autre confusion à éviter : la rusticité hivernale ne décide que du sort
+   d'une plante qu'on laisse en place. Une culture menée en annuelle n'a pas
+   besoin de survivre à l'hiver pour produire — c'est le cas de la patate
+   douce sous nos latitudes. On évalue donc séparément :
+     survieVivaceAuFroid     pertinent seulement si on la garde en place ;
+     faisabiliteCycleAnnuel  pertinent dès qu'on la replante chaque année.
+*/
+
+const CONFORTABLE = "favorable", LIMITE = "limite", HORS = "defavorable", INCONNU = "inconnu";
+
 export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   const dimensions = {};
-  if (!culture || !profilLieu) return { statut: "nonEvalue", dimensions };
+  const vide = {
+    compatibilite: "indeterminee", statutLocal: "indetermine", confiance: "faible",
+    dimensions, dimensionsDocumentees: 0, contradiction: false,
+    faisabiliteCycleAnnuel: "indeterminee", survieVivaceAuFroid: "sansObjet",
+  };
+  if (!culture || !profilLieu) return vide;
 
   const c = culture;
+  // Une culture est menée en annuelle par défaut : c'est le cas le plus courant,
+  // et cela n'affirme rien sur sa biologie — seulement sur la façon de la cultiver.
+  const gardeeEnPlace = c.cultiveeComme === "perenne" || c.perenne === true;
 
   // --- durée de saison sans gel exigée par le cycle
   const sourceSaison = valeurUtilisable(c.cycle?.saisonSansGelMin) ? c.cycle.saisonSansGelMin
-    : (!c.perenne && valeurUtilisable(c.cycle?.joursMaturite)) ? c.cycle.joursMaturite : null;
+    : (valeurUtilisable(c.cycle?.joursMaturite) ? c.cycle.joursMaturite : null);
   const saisonDerivee = sourceSaison === c.cycle?.joursMaturite && !!sourceSaison;
   if (sourceSaison && Number.isFinite(profilLieu.saisonSansGel)) {
     const requis = sourceSaison.valeur;
     dimensions.cycle = {
-      etat: profilLieu.sansGelToutelAnnee ? "favorable"
+      etat: profilLieu.sansGelToutelAnnee ? CONFORTABLE
         : etatDepuisMarges(profilLieu.saisonSansGel, requis, Math.max(20, requis * 0.15)),
       lieu: profilLieu.saisonSansGel, requis, unite: "jours",
       bloquant: true, source: sourceSaison, derive: saisonDerivee,
+      axe: "cycleAnnuel",
     };
   }
 
-  // --- chaleur accumulée (degrés-jours base 10)
+  // --- chaleur accumulée sur la saison
   if (valeurUtilisable(c.cycle?.degresJours10Min) && Number.isFinite(profilLieu.degresJours10)) {
     const requis = c.cycle.degresJours10Min.valeur;
     dimensions.chaleurCumulee = {
       etat: etatDepuisMarges(profilLieu.degresJours10, requis, requis * 0.15),
       lieu: profilLieu.degresJours10, requis, unite: "degrés-jours base 10",
-      bloquant: true, source: c.cycle.degresJours10Min,
+      bloquant: true, source: c.cycle.degresJours10Min, axe: "cycleAnnuel",
     };
   }
 
-  // --- rusticité : ne concerne que ce qui passe l'hiver en place
-  if (c.perenne && valeurUtilisable(c.rusticite?.tempMinTolere)
+  // --- rusticité : ne concerne QUE ce qu'on laisse passer l'hiver en place.
+  // Ne jamais s'en servir pour juger une culture menée en annuelle.
+  if (gardeeEnPlace && valeurUtilisable(c.rusticite?.tempMinTolere)
       && Number.isFinite(profilLieu.minimumHivernal)) {
     const requis = c.rusticite.tempMinTolere.valeur;
     dimensions.rusticite = {
       etat: etatDepuisMarges(profilLieu.minimumHivernal, requis, 3),
       lieu: profilLieu.minimumHivernal, requis, unite: "°C",
-      bloquant: true, source: c.rusticite.tempMinTolere,
+      bloquant: true, source: c.rusticite.tempMinTolere, axe: "survieHiver",
     };
   }
 
-  // --- besoin en froid hivernal (dormance)
-  if (c.perenne && valeurUtilisable(c.froidHivernal?.heuresFroidMin)
+  // --- besoin de froid hivernal (levée de dormance) : idem, seulement en place
+  if (gardeeEnPlace && valeurUtilisable(c.froidHivernal?.heuresFroidMin)
       && Number.isFinite(profilLieu.heuresFroid)) {
     const requis = c.froidHivernal.heuresFroidMin.valeur;
     dimensions.froidHivernal = {
       etat: etatDepuisMarges(profilLieu.heuresFroid, requis, requis * 0.2),
       lieu: profilLieu.heuresFroid, requis, unite: "heures sous 7,2 °C",
       bloquant: true, source: c.froidHivernal.heuresFroidMin,
-      estimation: true,   // reconstituées depuis des données quotidiennes
+      estimation: true, axe: "survieHiver",
     };
   }
 
-  // --- stress thermique : trop chaud nuit, le réchauffement n'est pas un gain
+  // --- chaleur excessive : trop chaud nuit. C'est une TOLÉRANCE, pas un besoin.
+  // On sait à partir de quelle température la culture décroche ; on ne sait pas
+  // combien de jours au-dessus compromettent la récolte. Inventer ce nombre
+  // serait fabriquer un seuil agronomique — on ne le fait pas : on affiche la
+  // mesure, et on ne conclut que si une source donne le nombre de jours toléré.
   if (valeurUtilisable(c.chaleur?.seuilStressThermique)) {
-    const seuil = c.chaleur.seuilStressThermique.valeur;
-    const dispo = Object.keys(profilLieu.joursAuDessus || {}).map(Number);
-    const proche = dispo.length
-      ? dispo.reduce((a, b) => Math.abs(b - seuil) < Math.abs(a - seuil) ? b : a) : null;
-    if (proche !== null && Number.isFinite(profilLieu.joursAuDessus[proche])) {
-      const jours = profilLieu.joursAuDessus[proche];
-      dimensions.stressThermique = {
-        etat: jours >= 25 ? "defavorable" : jours >= 8 ? "limite" : "favorable",
-        lieu: jours, seuilCulture: seuil, seuilMesure: proche, unite: "jours",
-        bloquant: false, source: c.chaleur.seuilStressThermique,
-        approximation: proche !== seuil,
-      };
+    const d = dimensionSeuilChaleur(c.chaleur.seuilStressThermique, profilLieu);
+    if (d) {
+      const tolere = c.chaleur?.joursMaxAuDessus;
+      dimensions.stressThermique = valeurUtilisable(tolere)
+        ? { ...d, bloquant: false, axe: "cycleAnnuel", requis: tolere.valeur,
+            source: tolere, etat: d.jours > tolere.valeur ? HORS
+              : d.jours > tolere.valeur * 0.75 ? LIMITE : CONFORTABLE }
+        : { ...d, bloquant: false, axe: "cycleAnnuel", etat: INCONNU, quantifiable: false };
     }
   }
 
-  // --- besoin de chaleur : une culture peut manquer de chaleur, pas seulement
-  // en avoir trop. Attention : la zone de chaleur AHS décrit ce que le LIEU
-  // inflige, jamais ce qu'une culture RÉCLAME — elle ne sert donc pas ici.
-  // Nous savons qu'un seuil existe, mais aucune source ne dit COMBIEN de jours
-  // au-dessus sont nécessaires : la dimension est donc documentée et non
-  // évaluable, ce qui interdit de conclure « éprouvé » sans l'interdire tout court.
+  // --- chaleur nécessaire : une culture peut en manquer.
+  // ATTENTION : la zone de chaleur AHS dit ce que le LIEU inflige, jamais ce
+  // qu'une culture RÉCLAME. Elle ne sert donc pas ici.
   if (valeurUtilisable(c.chaleur?.seuilMinCroissance)) {
-    const seuil = c.chaleur.seuilMinCroissance.valeur;
-    const dispo = Object.keys(profilLieu.joursAuDessus || {}).map(Number);
-    const proche = dispo.length
-      ? dispo.reduce((a, b) => Math.abs(b - seuil) < Math.abs(a - seuil) ? b : a) : null;
-    if (proche !== null && Number.isFinite(profilLieu.joursAuDessus[proche])) {
-      dimensions.besoinChaleur = {
-        etat: "inconnu", nonEvaluable: true,
-        lieu: profilLieu.joursAuDessus[proche], seuilCulture: seuil, seuilMesure: proche,
-        unite: "jours", bloquant: false, source: c.chaleur.seuilMinCroissance,
-        approximation: proche !== seuil,
-      };
+    const d = dimensionSeuilChaleur(c.chaleur.seuilMinCroissance, profilLieu);
+    if (d) {
+      const requis = c.chaleur?.joursMinAuDessus;
+      if (valeurUtilisable(requis)) {
+        dimensions.besoinChaleur = { ...d, bloquant: true, axe: "cycleAnnuel",
+          requis: requis.valeur, unite: "jours",
+          etat: etatDepuisMarges(d.jours, requis.valeur, requis.valeur * 0.25),
+          source: requis };
+      } else {
+        // Exigence documentée, mais aucune source ne la quantifie : on le dit,
+        // et cela n'enlève rien à la faisabilité du cycle — cela abaisse la
+        // confiance, pas le verdict.
+        dimensions.besoinChaleur = { ...d, bloquant: false, axe: "cycleAnnuel",
+          etat: INCONNU, quantifiable: false };
+      }
     }
   }
 
-  // --- eau : une réserve, pas un verdict — presque tout se corrige en arrosant
+  // --- eau : une réserve, jamais un verdict — presque tout se corrige en arrosant
+  // Aucune source ne dit à partir de quel déficit en millimètres une culture
+  // sensible décroche — et de toute façon presque tout se corrige en arrosant.
+  // On affiche donc la sensibilité documentée et la mesure locale, sans verdict.
   if (Number.isFinite(profilLieu.deficitHydriqueSaisonChaude)
       && valeurUtilisable(c.eau?.sensibiliteDeficit)) {
-    const deficit = profilLieu.deficitHydriqueSaisonChaude;
-    const sensible = c.eau.sensibiliteDeficit.valeur >= 2;
     dimensions.eau = {
-      etat: deficit > 250 && sensible ? "limite" : "favorable",
-      lieu: deficit, unite: "mm sur 90 jours", bloquant: false,
-      source: c.eau.sensibiliteDeficit,
+      etat: INCONNU, quantifiable: false,
+      sensibilite: c.eau.sensibiliteDeficit.valeur,
+      lieu: profilLieu.deficitHydriqueSaisonChaude, unite: "mm sur 90 jours",
+      bloquant: false, source: c.eau.sensibiliteDeficit, axe: "cycleAnnuel",
     };
   }
 
-  // --- retour de jardinier : l'observation sur place l'emporte sur le modèle
-  // pour CE lieu. Elle ne devient jamais un chiffre agronomique ; elle répond
-  // seulement à la question que les seuils manquants laissaient ouverte.
+  // --- retour de jardinier : couche de connaissance locale, distincte des
+  // données agronomiques. Elle ne devient jamais un chiffre.
   const retourProche = Array.isArray(retours) && retours.length ? retours[0] : null;
   if (retourProche) {
     const positif = retourProche.resultat !== "echec";
     dimensions.retourLocal = {
-      etat: positif ? "favorable" : "defavorable",
+      etat: positif ? CONFORTABLE : HORS,
       positif, resultat: retourProche.resultat,
       distance: retourProche.distance, lieu: retourProche.lieu?.nom,
-      bloquant: false, temoignage: true,
-      source: { valeur: 1, source: retourProche.source, url: null,
-        annee: retourProche.annee, confiance: retourProche.confiance,
-        note: retourProche.note },
+      nombre: retours.length, bloquant: false, temoignage: true, axe: "observation",
+      source: { valeur: 1, source: retourProche.source, url: retourProche.url || null,
+        annee: retourProche.annee, confiance: retourProche.confiance, note: retourProche.note },
     };
   }
 
   const liste = Object.values(dimensions);
-  const documentees = liste.length;
-  let statut = "nonEvalue";
-  let contradiction = false;
-  if (documentees >= 2) {
-    const modeleBloque = liste.some(d => d.bloquant && d.etat === "defavorable");
-    const positif = dimensions.retourLocal?.positif === true;
-    if (modeleBloque) {
-      statut = "incompatible";
-      // Quelqu'un la cultive pourtant sur place : ce n'est pas au témoignage de
-      // céder en silence, c'est à nos seuils d'être signalés comme suspects.
-      if (positif) contradiction = true;
-    } else if (liste.some(d => d.etat === "limite"
-        || (d.etat === "defavorable" && !d.bloquant))) {
-      statut = "experimental";
-    } else if (liste.some(d => d.etat === "inconnu")) {
-      // Une exigence documentée mais non mesurable interdit « éprouvé »…
-      // sauf si un jardinier du coin a déjà répondu à la question en la cultivant.
-      statut = positif ? "eprouve" : "experimental";
-    } else {
-      statut = "eprouve";
-    }
+  const agronomiques = liste.filter(d => !d.temoignage);
+
+  /* ----- axe 1 : faisabilité, séparée selon l'usage ----- */
+  const verdictAxe = (axe) => {
+    const dims = agronomiques.filter(d => d.axe === axe && d.bloquant);
+    if (!dims.length) return "indeterminee";
+    if (dims.some(d => d.etat === HORS)) return "impossible";
+    if (dims.some(d => d.etat === INCONNU)) return "indeterminee";
+    return "possible";
+  };
+  const faisabiliteCycleAnnuel = verdictAxe("cycleAnnuel");
+  const survieVivaceAuFroid = gardeeEnPlace ? verdictAxe("survieHiver") : "sansObjet";
+
+  // Une culture menée en annuelle ne dépend que de son cycle ; une culture
+  // gardée en place dépend des deux, et l'hiver prime.
+  let compatibilite;
+  if (gardeeEnPlace) {
+    compatibilite = survieVivaceAuFroid === "impossible" || faisabiliteCycleAnnuel === "impossible"
+      ? "incompatible"
+      : (survieVivaceAuFroid === "possible" ? "compatible" : "indeterminee");
+  } else {
+    compatibilite = faisabiliteCycleAnnuel === "impossible" ? "incompatible"
+      : faisabiliteCycleAnnuel === "possible" ? "compatible" : "indeterminee";
   }
 
-  return { statut, dimensions, dimensionsDocumentees: documentees, contradiction };
+  /* ----- axe 2 : statut local. Il exige des éléments POSITIFS ----- */
+  const retour = dimensions.retourLocal;
+  const reussiteRepetee = retour?.positif
+    && (retour.resultat === "recolteReguliere" || retour.nombre >= 3);
+  const echecLocal = retour && !retour.positif;
+
+  const quantifiees = agronomiques.filter(d => d.bloquant && d.etat !== INCONNU);
+  const toutesConfortables = quantifiees.length >= 2 && quantifiees.every(d => d.etat === CONFORTABLE);
+  const auMoinsUneLimite = quantifiees.some(d => d.etat === LIMITE);
+  const inconnuesRestantes = agronomiques.some(d => d.etat === INCONNU);
+
+  let statutLocal = "indetermine";
+  if (compatibilite === "incompatible") {
+    statutLocal = "indetermine";
+  } else if (echecLocal) {
+    statutLocal = "experimental";          // quelqu'un a essayé et échoué ici
+  } else if (reussiteRepetee) {
+    statutLocal = "eprouve";               // réussite démontrée sur place
+  } else if (auMoinsUneLimite && compatibilite !== "indeterminee") {
+    statutLocal = "experimental";          // marginal mais plausible : mesuré, pas supposé
+  } else if (toutesConfortables && !inconnuesRestantes) {
+    statutLocal = "eprouve";               // toutes les exigences connues, toutes tenues
+  }
+
+  /* ----- axe 3 : confiance dans ce que nous savons ----- */
+  let confiance = "faible";
+  if (agronomiques.length >= 3 && !inconnuesRestantes) confiance = "haute";
+  else if (agronomiques.length >= 2) confiance = "moyenne";
+  if (retour?.positif && confiance === "faible") confiance = "moyenne";
+
+  // Le modèle dit non, quelqu'un la cultive pourtant : on l'affiche, on ne
+  // l'efface pas. Ce sont nos seuils qu'il faut suspecter.
+  const contradiction = compatibilite === "incompatible" && retour?.positif === true;
+
+  return {
+    compatibilite, statutLocal, confiance,
+    faisabiliteCycleAnnuel, survieVivaceAuFroid, gardeeEnPlace,
+    dimensions, dimensionsDocumentees: agronomiques.length, contradiction,
+  };
+}
+
+/** Compte les jours au-dessus d'un seuil, au seuil mesuré le plus proche. */
+function dimensionSeuilChaleur(valeurSeuil, profilLieu) {
+  const seuil = valeurSeuil.valeur;
+  const dispo = Object.keys(profilLieu.joursAuDessus || {}).map(Number);
+  if (!dispo.length) return null;
+  const proche = dispo.reduce((a, b) => Math.abs(b - seuil) < Math.abs(a - seuil) ? b : a);
+  const jours = profilLieu.joursAuDessus[proche];
+  if (!Number.isFinite(jours)) return null;
+  return { jours, lieu: jours, seuilCulture: seuil, seuilMesure: proche,
+    unite: "jours", source: valeurSeuil, approximation: proche !== seuil };
 }
 
 /* ---------- tendance à +5 ans ------------------------------------------- */

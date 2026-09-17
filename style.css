@@ -950,3 +950,5 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .agro-dim.agro-temoignage{background:rgba(74,140,88,.10);border-left:3px solid #4a8c58}
 .agro-contradiction{font-size:.85rem;background:rgba(201,154,59,.15);
   border-radius:8px;padding:.45rem .6rem;margin:.5rem 0 0;line-height:1.45}
+.agro-badge{display:inline-block;background:rgba(63,107,70,.12);border-radius:999px;
+  padding:.1rem .5rem;font-size:.88rem;margin-left:.3rem}

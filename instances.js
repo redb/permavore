@@ -56,6 +56,9 @@ function enraciner(cultureId, options = {}) {
     cultureId,
     etat,
     depuis,
+    // Où pousse-t-elle réellement : pleine terre, serre, intérieur… Le moteur
+    // en a besoin, car une culture difficile dehors peut être évidente sous abri.
+    environnement: options.environnement || "pleine_terre",
     emplacement: options.emplacement || null,
     surface: Number.isFinite(options.surface) ? options.surface : null,
     quantite: Number.isFinite(options.quantite) ? options.quantite : null,
@@ -82,6 +85,7 @@ function majInstance(id, champs = {}) {
   if (!i) return null;
   if (champs.etat && ETATS_INSTANCE.includes(champs.etat)) i.etat = champs.etat;
   if (champs.depuis) i.depuis = normaliserDepuis(champs.depuis);
+  if ("environnement" in champs) i.environnement = champs.environnement || "pleine_terre";
   if ("emplacement" in champs) i.emplacement = champs.emplacement || null;
   if ("surface" in champs) i.surface = Number.isFinite(champs.surface) ? champs.surface : null;
   if ("quantite" in champs) i.quantite = Number.isFinite(champs.quantite) ? champs.quantite : null;
@@ -126,6 +130,9 @@ function migrerAdoptees(adoptees, dates) {
     const iso = dates && dates[cultureId];
     enraciner(cultureId, {
       etat: "plante",
+      // L'ancien stockage ne disait pas où : on ne suppose donc rien de plus
+      // que le cas le plus courant, et le jardinier pourra corriger.
+      environnement: "pleine_terre",
       depuis: iso ? { precision: "exacte", valeur: iso } : { precision: "inconnue" },
     });
     reprises++;
