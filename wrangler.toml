@@ -1,0 +1,13 @@
+# Configuration Cloudflare Pages de Permavore.
+# Le site reste statique ; seul /api/identifier (functions/) s'exécute côté serveur.
+name = "permavore"
+pages_build_output_dir = "."
+compatibility_date = "2026-05-01"
+
+# Limitation de débit de l'identification (3/min, 30/jour par visiteur).
+[[kv_namespaces]]
+binding = "RL"
+id = "445811b4d816435cbd92e3fb8cfa424c"
+
+# Secret à poser hors du dépôt (jamais dans ce fichier) :
+#   npx wrangler pages secret put PLANTNET_API_KEY --project-name=permavore

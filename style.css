@@ -599,3 +599,26 @@ footer strong { color: var(--vert-fonce); }
 }
 .rot-cycle .rc-etape { padding: 4px 9px; border-radius: 999px; background: #eee9dc; color: #6d5a33; }
 .rot-cycle .rc-etape.actif { background: var(--vert); color: #fff; }
+
+/* ---------- Identification d'une plante (Pl@ntNet) ---------- */
+.id-organes { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.id-resultat {
+  border: 1px solid var(--bord); border-radius: 12px; background: #fff;
+  padding: 11px 13px; margin-top: 10px;
+}
+.id-tete { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 15px; }
+.id-tete em { color: var(--texte-doux); font-size: 13px; }
+.id-score { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--vert-fonce); }
+.id-barre { height: 6px; border-radius: 99px; background: #eee9dc; margin: 7px 0 4px; overflow: hidden; }
+.id-barre span { display: block; height: 100%; background: var(--vert); border-radius: 99px; }
+.id-famille { font-size: 12px; color: var(--texte-doux); }
+.id-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.id-alerte {
+  margin: 12px 0 0; padding: 9px 11px; border-radius: 10px; font-size: 13.5px;
+  background: #fff3d9; color: #7a5310;
+}
+.id-securite {
+  margin: 14px 0 0; padding: 9px 11px; border-radius: 10px; font-size: 13px;
+  background: #fdeeeb; color: #8f3526;
+}
+.id-source { margin: 8px 0 0; font-size: 12px; color: var(--texte-doux); text-align: right; }

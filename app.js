@@ -1908,6 +1908,7 @@ function traduireStatique() {
   set("#btn-ajouter", t("btn.ajouter"));
   set("#btn-ressources", t("btn.ressources"));
   set("#btn-photo", t("btn.photo"));
+  set("#btn-identifier", t("btn.identifier"));
   set("#btn-plan", t("btn.plan"));
   attr("#vue-liste", "title", t("vue.liste.title"));
   attr("#vue-cartes", "title", t("vue.cartes.title"));
@@ -1993,6 +1994,12 @@ function init() {
   $("#btn-ajouter").addEventListener("click", () => ouvrirFormAjout(""));
   $("#btn-ressources").addEventListener("click", ouvrirModaleRessources);
   $("#btn-photo").addEventListener("click", () => $("#input-photo").click());
+  $("#btn-identifier").addEventListener("click", () => $("#input-identifier").click());
+  $("#input-identifier").addEventListener("change", e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";                       // permet de reprendre la même photo
+    if (f) traiterPhotoIdentification(f);
+  });
   $("#input-photo").addEventListener("change", e => {
     const f = e.target.files && e.target.files[0];
     e.target.value = "";                       // permet de reprendre la même photo
@@ -2622,4 +2629,158 @@ function blocRotationHTML(p) {
     <div class="rot-cycle">${cycle}</div>
     ${liste || `<p style="margin:0;font-size:14px;color:var(--texte-doux)">${t("rotation.aucune")}</p>`}
     ${exclus}`;
+}
+
+/* =========================================================================
+   Identification d'une plante par photo — Pl@ntNet via /api/identifier
+   La clé d'API reste côté serveur (functions/api/identifier.js).
+   La photo est ré-encodée dans le navigateur avant l'envoi : le passage par
+   un canvas supprime les métadonnées EXIF, dont la position GPS.
+   ========================================================================= */
+
+const ORGANES_ID = ["auto", "leaf", "flower", "fruit", "bark"];
+const SEUIL_CONFIANCE = 0.3;
+
+// Nom scientifique normalisé : sans auteur, hybride (×) ni rang infraspécifique.
+function normLatin(s) {
+  return String(s || "").toLowerCase()
+    .replace(/\s(var|subsp|ssp|cv)\.?\s.*$/, "")
+    .replace(/×/g, " ")
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+// Plantes de la base qui correspondent à une espèce (sinon au genre seul,
+// pour les fiches décrites au niveau du genre comme « Mentha »).
+function plantesPourLatin(latin) {
+  const [genre, espece] = normLatin(latin).split(" ");
+  if (!genre) return [];
+  const exactes = PLANTES.filter(p => {
+    const [g, e] = normLatin(p.latin).split(" ");
+    return g === genre && e && e === espece;
+  });
+  if (exactes.length) return exactes;
+  return PLANTES.filter(p => {
+    const parts = normLatin(p.latin).split(" ");
+    return parts.length === 1 && parts[0] === genre;
+  });
+}
+
+function afficherModale() {
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+}
+
+async function traiterPhotoIdentification(fichier) {
+  let dataUrl;
+  try { dataUrl = await redimensionner(fichier, 1280, 0.85); }
+  catch (e) { ouvrirMessage(t("id.err.titre"), t("id.err.photo")); return; }
+  ecranOrganeIdentification(dataUrl);
+}
+
+function ecranOrganeIdentification(dataUrl) {
+  let organe = "auto";
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>${t("id.titre")}</h2>
+      <p class="sous">${t("id.sous")}</p>
+      <img class="photo-preview" src="${dataUrl}" alt="" />
+      <div class="id-organes">${ORGANES_ID.map(o =>
+        `<button type="button" class="chip ${o === "auto" ? "actif" : ""}" data-organe="${o}">${t("id.organe." + o)}</button>`
+      ).join("")}</div>
+      <div class="form-actions">
+        <button type="button" class="btn" id="id-lancer">${t("id.lancer")}</button>
+      </div>
+    </div>`;
+  const modale = $("#modale");
+  modale.querySelector(".fermer").addEventListener("click", fermerModale);
+  const puces = modale.querySelectorAll("[data-organe]");
+  puces.forEach(b => b.addEventListener("click", () => {
+    organe = b.dataset.organe;
+    puces.forEach(x => x.classList.toggle("actif", x === b));
+  }));
+  $("#id-lancer").addEventListener("click", () => lancerIdentification(dataUrl, organe));
+  afficherModale();
+}
+
+async function lancerIdentification(dataUrl, organe) {
+  ouvrirAttente(t("id.analyse"));
+  let reponse, donnees;
+  try {
+    const fd = new FormData();
+    fd.append("images", await (await fetch(dataUrl)).blob(), "plante.jpg");
+    fd.append("organe", organe);
+    fd.append("lang", getLang());
+    reponse = await fetch("/api/identifier", {
+      method: "POST", body: fd, signal: AbortSignal.timeout(35000),
+    });
+    donnees = await reponse.json();
+  } catch (e) {
+    ouvrirMessage(t("id.err.titre"), t("id.err.reseau"));
+    return;
+  }
+  if (!reponse.ok) {
+    const cles = {
+      non_configure: "id.err.non_configure",
+      trop_de_demandes: "id.err.trop_de_demandes",
+      quota_service_epuise: "id.err.quota",
+    };
+    ouvrirMessage(t("id.err.titre"), t(cles[donnees && donnees.erreur] || "id.err.reseau"));
+    return;
+  }
+  ecranResultatsIdentification(dataUrl, Array.isArray(donnees.resultats) ? donnees.resultats : []);
+}
+
+function ecranResultatsIdentification(dataUrl, resultats) {
+  const top = resultats.slice(0, 3);
+  const incertain = !top.length || top[0].score < SEUIL_CONFIANCE;
+
+  const blocs = top.map((r, i) => {
+    const pct = Math.round((Number(r.score) || 0) * 100);
+    const nom = (r.noms && r.noms[0]) || r.latin;
+    const correspondances = plantesPourLatin(r.latin);
+    const actions = correspondances.length
+      ? correspondances.map(p =>
+          `<button type="button" class="btn secondaire" data-fiche="${echapperHTML(p.id)}">
+             ${p.emoji} ${t("id.voirfiche")} : ${echapperHTML(p.nom)}</button>`).join("")
+      : `<button type="button" class="btn secondaire" data-ajout="${i}">➕ ${t("id.ajouter")}</button>`;
+    return `<div class="id-resultat">
+      <div class="id-tete"><strong>${echapperHTML(nom)}</strong><em>${echapperHTML(r.latin)}</em>
+        <span class="id-score">${t("id.confiance", { pct })}</span></div>
+      <div class="id-barre"><span style="width:${Math.max(0, Math.min(100, pct))}%"></span></div>
+      ${r.famille ? `<div class="id-famille">${echapperHTML(r.famille)}</div>` : ""}
+      <div class="id-actions">${actions}</div>
+    </div>`;
+  }).join("");
+
+  $("#modale").innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>${t("id.titre")}</h2>
+      <img class="photo-preview" src="${dataUrl}" alt="" />
+      ${incertain ? `<p class="id-alerte">${t(top.length ? "id.incertain" : "id.aucun")}</p>` : ""}
+      ${blocs}
+      <p class="id-securite">${t("id.securite")}</p>
+      <p class="id-source"><a href="https://plantnet.org" target="_blank" rel="noopener">${t("id.source")}</a></p>
+      <div class="form-actions">
+        <button type="button" class="btn secondaire" id="id-reprendre">📷 ${t("id.reprendre")}</button>
+      </div>
+    </div>`;
+
+  const modale = $("#modale");
+  modale.querySelector(".fermer").addEventListener("click", fermerModale);
+  modale.querySelectorAll("[data-fiche]").forEach(b => b.addEventListener("click", () => {
+    const p = PLANTES.find(x => x.id === b.dataset.fiche);
+    if (p) ouvrirModale(p);
+  }));
+  modale.querySelectorAll("[data-ajout]").forEach(b => b.addEventListener("click", () => {
+    const r = top[Number(b.dataset.ajout)];
+    if (!r) return;
+    ouvrirFormAjout((r.noms && r.noms[0]) || r.latin);
+    const champLatin = $("#f-latin");
+    if (champLatin && !champLatin.value.trim()) champLatin.value = r.latin;
+  }));
+  $("#id-reprendre").addEventListener("click", () => $("#input-identifier").click());
+  afficherModale();
 }

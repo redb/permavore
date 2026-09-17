@@ -77,7 +77,7 @@ aromatiques adaptés au climat, en mettant en avant ceux **à planter ce mois-ci
 | `network.css` | Interface responsive du réseau |
 | `tests/` | Tests unitaires du socle réseau |
 
-Site **100 % statique**, aucune dépendance. Ouvrir `index.html` ou servir le
+Site statique, aucune dépendance — à une exception près : `/api/identifier` (voir plus bas). Ouvrir `index.html` ou servir le
 dossier.
 
 ## Développement local
@@ -189,6 +189,44 @@ refusés.
 
 Les suggestions sont en plus filtrées par saison et par zone climatique, et les
 vivaces sont exclues de la rotation.
+
+## Identification d'une plante par photo (Pl@ntNet)
+
+Bouton **🔍 Identifier une plante** : photo → choix de l'organe visible
+(feuille, fleur, fruit, écorce ou « je ne sais pas ») → espèces probables avec
+leur score → **« Voir la fiche »** si l'espèce est dans la base (correspondance
+par nom scientifique, genre seul pour les fiches de genre comme *Mentha*), sinon
+**« Ajouter à la base »** avec nom et nom latin pré-remplis.
+
+C'est la seule partie du site qui s'exécute côté serveur :
+`functions/api/identifier.js` (Pages Function) relaie vers l'API
+[Pl@ntNet](https://my.plantnet.org) pour que **la clé ne soit jamais dans le
+navigateur**.
+
+| Garde-fou | Réglage |
+|---|---|
+| Entrées | multipart, 1 à 3 images JPEG/PNG ≤ 2 Mo, organe en liste blanche |
+| Origine | requêtes d'un autre site refusées (403) |
+| Délai / reprises | 15 s, 1 seule reprise sur panne ou 5xx |
+| Débit | 3/min et 30/jour par visiteur (KV `RL`, IP hachée, jamais stockée en clair), décompté **après** validation |
+| Réponse | champs utiles uniquement ; la clé n'apparaît jamais |
+| Vie privée | photo ré-encodée dans le navigateur → EXIF et position GPS supprimés |
+
+Quota du plan gratuit Pl@ntNet : **500 identifications/jour**. Sans clé, le
+bouton répond proprement « identification pas encore activée ».
+
+Activer (la clé ne passe jamais par le dépôt) :
+
+```bash
+npx wrangler pages secret put PLANTNET_API_KEY --project-name=permavore
+```
+
+Tester en local sans vraie clé : créer un `.dev.vars` (ignoré par git) avec
+`PLANTNET_API_KEY=…` et, pour viser un faux service, `PLANTNET_URL=…`, puis
+`npx wrangler pages dev .`.
+
+Une identification automatique reste une **aide** : l'interface rappelle de ne
+jamais consommer une plante sur cette seule base (sosies toxiques).
 
 ## À enrichir
 
