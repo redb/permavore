@@ -65,7 +65,7 @@ function renderVarietyRows(varieties) {
     return `
       <div class="seed-empty">
         <strong>Aucune variété proposée pour le moment.</strong>
-        <span>Le moteur de recommandations reste disponible et le lien partenaire peut prendre le relais.</span>
+        <span>Le moteur de recommandations reste disponible et le bouton de recherche de graines prend le relais.</span>
       </div>`;
   }
 
@@ -365,7 +365,7 @@ async function enhancePlantModal(plant) {
   const existingPartnerLink = modalBody.querySelector(".lien-achat");
   existingPartnerLink?.classList.add("partner-fallback");
   if (existingPartnerLink) {
-    existingPartnerLink.childNodes[0].textContent = "Acheter graines / plants auprès d’un partenaire ";
+    existingPartnerLink.childNodes[0].textContent = "Trouver graines / plants ";
   }
 
   const loading = document.createElement("section");

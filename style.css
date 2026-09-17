@@ -633,3 +633,10 @@ footer strong { color: var(--vert-fonce); }
 .hero .marque span { opacity: .85; }
 .bc-marque { display: inline-flex; align-items: center; }
 .bc-marque .logo-marque { border-radius: 7px; margin-right: 7px; }
+
+/* ---------- Nom « Permavore » (image en Graham, voir README « Licences ») ---------- */
+.wordmark { display: block; width: auto; height: 22px; }
+.hero .marque span { opacity: 1; }
+.bc-marque .wordmark { height: 19px; }
+.footer-credit { font-size: 12px; opacity: .8; }
+.footer-credit a { color: inherit; }

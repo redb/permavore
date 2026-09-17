@@ -647,10 +647,12 @@ function texteDensite(plante) {
 }
 
 // Lien d'achat : 1) lien propre à la plante, 2) partenaire global, 3) recherche web
+// Verrou lu défensivement : si un ancien data.js reste en cache, on reste non commercial.
+const monetisationActive = () => typeof MONETISATION_ACTIVE !== "undefined" && MONETISATION_ACTIVE === true;
 function lienAchat(plante) {
   const lienPropre = urlExterneSure(plante.lien);
   if (lienPropre) return lienPropre;
-  if (typeof PARTENAIRE_DEFAUT !== "undefined" && PARTENAIRE_DEFAUT.actif) {
+  if (monetisationActive() && typeof PARTENAIRE_DEFAUT !== "undefined" && PARTENAIRE_DEFAUT.actif) {
     const lienPartenaire = urlExterneSure(
       PARTENAIRE_DEFAUT.url.replace("{q}", encodeURIComponent(txt(plante.nom))));
     if (lienPartenaire) return lienPartenaire;
@@ -661,6 +663,7 @@ function lienAchat(plante) {
 }
 // Le lien est-il sponsorisé (badge "Partenaire ✦") ?
 function estSponsorise(plante) {
+  if (!monetisationActive()) return false;         // projet non commercial (cf. data.js)
   if (urlExterneSure(plante.lien)) return plante.sponsorise === true;
   return typeof PARTENAIRE_DEFAUT !== "undefined"
     && PARTENAIRE_DEFAUT.actif && PARTENAIRE_DEFAUT.sponsorise
@@ -1147,7 +1150,6 @@ function ouvrirFormAjout(prefill = "") {
           </label>
         </div>
         <div class="fchamp inline full"><input id="f-frileux" type="checkbox" /><label for="f-frileux">${t("form.frileux")}</label></div>
-        <div class="fchamp inline full"><input id="f-sponsorise" type="checkbox" /><label for="f-sponsorise">${t("form.sponsorise")}</label></div>
       </div>
       <div class="form-erreur" id="f-erreur" role="alert" hidden></div>
       <div class="form-actions">
@@ -1160,14 +1162,6 @@ function ouvrirFormAjout(prefill = "") {
   $("#f-annuler").addEventListener("click", fermerModale);
   $("#f-enregistrer").addEventListener("click", enregistrerPlante);
   $("#f-auto").addEventListener("click", autoRemplirFiche);
-  const lien = $("#f-lien"), sponsorise = $("#f-sponsorise");
-  const majOptionSponsor = () => {
-    const disponible = Boolean(urlExterneSure(lien.value.trim()));
-    sponsorise.disabled = !disponible;
-    if (!disponible) sponsorise.checked = false;
-  };
-  lien.addEventListener("input", majOptionSponsor);
-  majOptionSponsor();
   g_photo_reset();
   function g_photo_reset() {
     const el = $("#f-photo");
@@ -1416,7 +1410,7 @@ function enregistrerPlante() {
     court: g("court").value.trim() || t("plante.ajouteeparToi"),
     long: g("long").value.trim() || g("court").value.trim() || t("plante.ajouteeparToi"),
     conseils: g("conseils").value.split("\n").map(s => s.trim()).filter(Boolean),
-    lien: g("lien").value.trim() || "", sponsorise: g("sponsorise").checked,
+    lien: g("lien").value.trim() || "", sponsorise: false,
   };
   const resultat = validerPlantePerso(candidate);
   if (!resultat.valide) {
@@ -1888,6 +1882,7 @@ function traduireStatique() {
   set("#hero-intro", t("hero.intro"));
   set("#footer-marque", t("footer.marque"));
   set("#footer-note", t("footer.note"));
+  set("#footer-credit", t("footer.credit"));
   set("#label-ville", t("champ.ville.label"));
   set("#label-surface", t("champ.surface.label"));
   set("#label-zone", t("champ.zone.label"));

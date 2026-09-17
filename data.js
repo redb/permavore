@@ -116,7 +116,17 @@ const CATEGORIES = {
   exotique:   { label: bi("Exotique", "Exotic"), hue: 32 },
 };
 
-// --- Liens d'achat / partenaires (sponsoring) ---------------------------------
+// --- Monétisation : VERROUILLÉE --------------------------------------------------
+// Permavore est un projet NON COMMERCIAL. C'est la condition de la licence d'essai
+// de la police Graham (Zetafonts, licence #104877) utilisée pour le nom du site.
+// Tant que MONETISATION_ACTIVE vaut false : aucun lien affilié, aucun badge
+// « Partenaire », seulement une recherche web neutre.
+// ⚠️ AVANT de passer à true, et dès le premier euro de revenu lié à Permavore :
+//    acheter la licence commerciale Graham (Web + Logo) — voir README
+//    « Licences et crédits » et braincentral BDR-023.
+const MONETISATION_ACTIVE = false;
+
+// --- Liens d'achat / partenaires (sponsoring, inactif tant que verrouillé) ------
 // 3 façons de gérer un lien sponsorisé, par ordre de priorité :
 //   1. Sur une plante : `lien:"https://…?aff=TONCODE"` + `sponsorise:true`
 //      → bouton "🛒 Trouver" pointant vers ton lien affilié, badge "Partenaire ✦".

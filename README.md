@@ -25,13 +25,13 @@ aromatiques adaptés au climat, en mettant en avant ceux **à planter ce mois-ci
   **encombrement** et **exposition**.
 - **Clic sur une carte** → fiche détaillée (description longue, calendrier,
   conseils, fiche technique, estimation, lien d'achat).
-- **Lien d'achat sponsorisable** par variété (`lien` + `sponsorise` dans
-  `data.js`).
+- **Lien d'achat** par variété (`lien` dans `data.js`) ; le sponsoring est
+  désactivé, le projet étant non commercial (voir « Licences et crédits »).
 - **Filtres** : catégorie, cycle, petits espaces.
 - **Réseau de semences pilote** sur la fiche Tomate : variétés reproductibles,
   disponibilité entre Primavores, protocole sourcé, aperçu des lignées et demande
   résiliente. Si l'API n'est pas disponible, les données locales et le lien
-  partenaire restent utilisables.
+  de recherche de graines restent utilisables.
 - Une plante ajoutée manuellement peut être marquée **« J’ai enraciné »** pour
   indiquer qu’elle pousse déjà dans le jardin, sans créer automatiquement une
   offre de graines.
@@ -124,6 +124,8 @@ Idées d'industrialisation : import d'un CSV/JSON, ou petit script qui pré-remp
 `photo`/`latin` depuis Wikipédia (comme fait pour les 37 photos actuelles).
 
 ## Liens sponsorisés
+
+> Désactivés tant que `MONETISATION_ACTIVE = false` (voir « Licences et crédits »).
 
 Trois niveaux, dans `data.js` (par priorité) :
 
@@ -227,6 +229,34 @@ Tester en local sans vraie clé : créer un `.dev.vars` (ignoré par git) avec
 
 Une identification automatique reste une **aide** : l'interface rappelle de ne
 jamais consommer une plante sur cette seule base (sosies toxiques).
+
+## Licences et crédits
+
+### Police Graham (nom « Permavore »)
+
+- **Licence actuelle** : essai Zetafonts n° 104877 (17/09/2026), personnelle et
+  **non commerciale**, un seul appareil.
+- **Ce qu'elle permet ici** : publier un visuel fixe, `icons/wordmark-permavore.png`,
+  avec crédit visible (« Graham par Zetafonts », pied de page).
+- **Ce qu'elle interdit** : mettre les fichiers de police en ligne (@font-face),
+  les placer sur un serveur ou **dans ce dépôt**, ou tout usage commercial. Les
+  polices restent sur le poste de JBR ; ne jamais les commiter.
+
+> ⚠️ **Engagement : dès le premier euro de revenu lié à Permavore** (affiliation,
+> publicité, dons, ventes…), acheter la licence commerciale Graham auprès de
+> Zetafonts (info@zetafonts.com) **avant** d'encaisser : licence **Web** pour le
+> domaine définitif, plus licence **Logo** si le nom en Graham reste le logo.
+> Décision tracée dans braincentral **BDR-023**.
+
+Ce verrou existe aussi dans le code : `MONETISATION_ACTIVE = false` (`data.js`)
+désactive liens affiliés et badges « Partenaire ». Ne le passer à `true`
+qu'après l'achat de la licence.
+
+### Autres
+
+- Logo « P » : `sources/logo-permavore.png` (création commandée par JBR).
+- Photo d'aperçu : `sources/photo-pousse-og.jpg`.
+- Identification des plantes : Pl@ntNet (attribution affichée).
 
 ## À enrichir
 
