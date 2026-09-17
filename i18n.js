@@ -107,7 +107,7 @@ const I18N = {
     en: "Find the fruits and vegetables suited to your town and garden size. What should you plant today? Permavore tells you." },
 
   // En-tête
-  "hero.marque": { fr: "🌱 Permavore", en: "🌱 Permavore" },
+  "hero.marque": { fr: "Permavore", en: "Permavore" },
   "hero.titre": { fr: "Le potager fait pour ton jardin", en: "The vegetable garden built for your yard" },
   "hero.intro": { fr: "Indique ta ville et la surface disponible : on te propose les fruits et légumes adaptés, en mettant en avant ceux à <strong>planter maintenant</strong>.",
     en: "Enter your town and the space you have available: we'll suggest the fruits and vegetables that suit it, highlighting what to <strong>plant right now</strong>." },
