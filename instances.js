@@ -38,7 +38,7 @@ let INSTANCES = [];
    elle fait exception, mais on ne répète jamais les caractéristiques de la
    serre sur chaque plante.
 */
-let ZONES = [];
+let ZONES_JARDIN = [];
 
 function chargerInstances() {
   try {
@@ -51,20 +51,20 @@ function chargerInstances() {
 function chargerZones() {
   try {
     const brut = JSON.parse(localStorage.getItem(LS_ZONES) || "[]");
-    ZONES = Array.isArray(brut) ? brut.filter(z => z && z.id) : [];
-  } catch { ZONES = []; }
-  return ZONES;
+    ZONES_JARDIN = Array.isArray(brut) ? brut.filter(z => z && z.id) : [];
+  } catch { ZONES_JARDIN = []; }
+  return ZONES_JARDIN;
 }
 
 function sauverZones() {
-  try { localStorage.setItem(LS_ZONES, JSON.stringify(ZONES)); }
+  try { localStorage.setItem(LS_ZONES, JSON.stringify(ZONES_JARDIN)); }
   catch { /* stockage refusé */ }
 }
 
 /** Crée ou met à jour une zone et son environnement. */
 function definirZone(id, champs = {}) {
-  let z = ZONES.find(x => x.id === id);
-  if (!z) { z = { id: id || nouvelIdentifiant(), cree: new Date().toISOString() }; ZONES.push(z); }
+  let z = ZONES_JARDIN.find(x => x.id === id);
+  if (!z) { z = { id: id || nouvelIdentifiant(), cree: new Date().toISOString() }; ZONES_JARDIN.push(z); }
   if ("nom" in champs) z.nom = champs.nom || null;
   if ("environnement" in champs) z.environnement = champs.environnement || null;
   if ("proprietes" in champs) z.proprietes = champs.proprietes || null;
@@ -73,7 +73,7 @@ function definirZone(id, champs = {}) {
   return z;
 }
 
-const zone = (id) => ZONES.find(z => z.id === id) || null;
+const zone = (id) => ZONES_JARDIN.find(z => z.id === id) || null;
 
 /**
  * Environnement effectif d'une instance : sa surcharge si elle en a une, sinon
@@ -208,7 +208,7 @@ if (typeof window !== "undefined") {
   window.Instances = {
     enraciner, majInstance, deraciner, instancesDe, estEnracinee,
     culturesEnracinees, migrerAdoptees, charger: chargerInstances,
-    definirZone, zone, zones: () => [...ZONES], environnementDe,
+    definirZone, zone, zones: () => [...ZONES_JARDIN], environnementDe,
     ETATS: ETATS_INSTANCE, PRECISIONS: PRECISIONS_DATE,
   };
 }

@@ -954,3 +954,10 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
   padding:.1rem .5rem;font-size:.88rem;margin-left:.3rem}
 .agro-preuve{display:block;width:100%;font-size:.86rem;margin-top:.25rem;opacity:.9}
 .agro-preuve em{opacity:.75;font-size:.82rem}
+.sauv-etat{margin:.2rem 0;font-weight:600;font-size:.95rem}
+.sauv-bon{color:#2f7a3e}
+.sauv-alerte{color:#a4452c}
+.sauv-neutre{color:#6b6357}
+.sauv-explication{margin:.1rem 0 .6rem;font-size:.9rem;opacity:.85;line-height:1.45}
+.sauv-actions{display:flex;gap:.5rem;flex-wrap:wrap}
+.sauv-message{font-size:.9rem;min-height:1.2em;margin:.5rem 0 0}
