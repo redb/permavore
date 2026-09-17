@@ -1954,6 +1954,7 @@ function traduireStatique() {
 
   set("#hero-titre", t("hero.titre"));
   set("#hero-intro", t("hero.intro"));
+  set("#form-consigne", t("hero.consigne"));
   set("#footer-marque", t("footer.marque"));
   set("#footer-note", t("footer.note"));
   set("#footer-credit", t("footer.credit"));
@@ -2422,96 +2423,167 @@ function scoreCurseurs(plante) {
     + e * exp + (1 - e) * (3 - exp) * 0.5;
 }
 
-// Projection à 5 ans : affichée UNIQUEMENT si une entrée sourcée existe.
-// Tant que PROJECTIONS_CLIMAT est vide, on annonce l'absence de donnée — jamais
-// une tendance supposée, et jamais le réchauffement présenté comme favorable.
-function projectionClimat(plante, zone = state.zone) {
+// ---------------------------------------------------------------------------
+// Compatibilité « chez toi » et tendance à +5 ans.
+//
+// Tout passe par le moteur (climat-core.mjs) : la fiche ne calcule rien
+// elle-même. Trois conditions doivent être réunies pour qu'une tendance soit
+// affichée — données climatiques suffisantes, seuils de la culture présents,
+// sources identifiées — sinon « projection non disponible », sans détour.
+// ---------------------------------------------------------------------------
+
+const climatPret = () => typeof window !== "undefined" && window.Climat;
+
+function profilCulture(plante) {
+  return (typeof window !== "undefined" && window.profilAgro) ? window.profilAgro(plante.id) : null;
+}
+
+/** Déclenche le chargement du climat local sans bloquer l'affichage. */
+function demarrerClimat() {
+  if (!climatPret() || !state.villeCoords) return;
+  window.Climat.charger(state.villeCoords.lat, state.villeCoords.lng);
+}
+
+/** Entrée sourcée saisie à la main : elle prime sur tout calcul. */
+function projectionManuelle(plante, zone = state.zone) {
   const table = typeof PROJECTIONS_CLIMAT !== "undefined" ? PROJECTIONS_CLIMAT : {};
   const parZone = table[zone];
   return (parZone && parZone[plante.id]) || null;
 }
-function projectionHTML(plante) {
-  const p = projectionClimat(plante);          // entrée sourcée saisie à la main : priorité
-  if (p) {
-    const cle = ["favorable", "stable", "defavorable"].includes(p.tendance) ? p.tendance : "incertain";
-    return `<span class="proj-tendance proj-${cle}">${t("horizon.tendance." + cle)}</span>
-      <span class="proj-resume">${echapperHTML(p.resume || "")}</span>
-      <span class="proj-source">${t("horizon.source", {
-        source: echapperHTML(p.source || "?"), scenario: echapperHTML(p.scenario || "?"),
-        reference: echapperHTML(p.periodeReference || "?"), horizon: echapperHTML(p.horizon || "?"),
-        resolution: echapperHTML(p.resolution || "?"), maj: echapperHTML(p.miseAJour || "?"),
-        confiance: t("horizon.confiance." + (["faible", "moyenne", "elevee"].includes(p.confiance) ? p.confiance : "faible")),
-      })}</span>`;
-  }
-  // Sinon : tendance calculée depuis Open-Meteo, UNIQUEMENT pour une culture dont la
-  // base documente qu'elle craint le gel (donc limitée par la chaleur).
-  if (!plante.frileux) return `<span class="proj-absente">${t("horizon.nondocumente")}</span>`;
-  if (!state.villeCoords) return `<span class="proj-absente">${t("horizon.sanscoords")}</span>`;
-  const proj = state.projectionClimat;
-  if (proj === null) return `<span class="proj-absente" id="proj-attente">${t("horizon.calcul")}</span>`;
-  if (proj === false) return `<span class="proj-absente">${t("horizon.indisponible2")}</span>`;
 
-  const d = tendanceChaleur(proj.reference, proj.horizon, proj.accord);
-  const cle = d.tendance;
-  const indicateurs = t("horizon.indicateurs", {
-    refSaison: proj.reference.saisonSansGel, horSaison: proj.horizon.saisonSansGel,
-    refChauds: proj.reference.joursChauds, horChauds: proj.horizon.joursChauds,
-    refMin: nombreFR(proj.reference.minimum), horMin: nombreFR(proj.horizon.minimum),
-  });
+function sourceManuelleHTML(p) {
+  const cle = ["favorable", "stable", "defavorable"].includes(p.tendance) ? p.tendance : "incertain";
   return `<span class="proj-tendance proj-${cle}">${t("horizon.tendance." + cle)}</span>
-    <span class="proj-resume">${indicateurs}${d.raison === "desaccord" ? " " + t("horizon.desaccord") : ""}${
-      d.raison === "variabilite" ? " " + t("horizon.variabilite", { seuil: nombreFR(d.seuil) }) : ""}${
-      d.exces ? " " + t("horizon.exces") : ""} ${t("horizon.pourquoi20ans")}</span>
-    <span class="proj-source">${t("horizon.sourceOM", {
-      source: echapperHTML(proj.meta.source), modeles: echapperHTML(proj.modeles.join(", ")),
-      scenario: echapperHTML(proj.meta.scenario), reference: echapperHTML(proj.meta.periodeReference),
-      horizon: echapperHTML(proj.meta.horizonPeriode), resolution: echapperHTML(proj.meta.resolution),
-      licence: echapperHTML(proj.meta.licence), maj: echapperHTML(proj.meta.miseAJour),
-      confiance: t("horizon.confiance." + d.confiance),
+    <span class="proj-resume">${echapperHTML(p.resume || "")}</span>
+    <span class="proj-source">${t("horizon.source", {
+      source: echapperHTML(p.source || "?"), scenario: echapperHTML(p.scenario || "?"),
+      reference: echapperHTML(p.periodeReference || "?"), horizon: echapperHTML(p.horizon || "?"),
+      resolution: echapperHTML(p.resolution || "?"), maj: echapperHTML(p.miseAJour || "?"),
+      confiance: t("horizon.confiance." + (["faible", "moyenne", "elevee"].includes(p.confiance) ? p.confiance : "faible")),
     })}</span>`;
 }
 
-// Récupère la projection une seule fois par session, sans bloquer l'affichage.
-async function chargerProjectionClimat(plante) {
-  if (state.projectionClimat !== null || !state.villeCoords || state._projectionEnCours) return;
-  state._projectionEnCours = true;
-  let resultat = false;
-  try {
-    resultat = (await projectionLocale(state.villeCoords.lat, state.villeCoords.lng)) || false;
-  } catch (e) {
-    journaliserAvertissement("projection_climat_echec", { message: e && e.message });
+const LIBELLE_DIMENSION = {
+  cycle: "agro.dim.cycle", chaleurCumulee: "agro.dim.chaleurCumulee",
+  rusticite: "agro.dim.rusticite", froidHivernal: "agro.dim.froidHivernal",
+  stressThermique: "agro.dim.stressThermique", eau: "agro.dim.eau",
+};
+
+/** Détail « Pourquoi ? » : une ligne par dimension réellement documentée. */
+function detailCompatibiliteHTML(compat, tend) {
+  const lignes = Object.entries(compat.dimensions).map(([cle, d]) => {
+    const requis = Number.isFinite(d.requis)
+      ? t("agro.requis", { valeur: nombreFR(d.requis), unite: echapperHTML(d.unite || "") })
+      : "";
+    const chez = Number.isFinite(d.lieu)
+      ? t("agro.chezToi", { valeur: nombreFR(d.lieu), unite: echapperHTML(d.unite || "") })
+      : "";
+    const effet = (tend?.effets || []).find(e => e.dimension === cle);
+    const fleche = effet ? ` <span class="agro-fleche agro-${effet.sens}">${t("agro.effet." + effet.sens)}</span>` : "";
+    return `<li class="agro-dim agro-${d.etat}">
+      <span class="agro-nom">${t(LIBELLE_DIMENSION[cle] || cle)}</span>
+      <span class="agro-valeurs">${chez}${requis ? " · " + requis : ""}</span>${fleche}
+      ${d.derive ? `<em class="agro-reserve">${t("agro.derive")}</em>` : ""}
+      ${d.estimation ? `<em class="agro-reserve">${t("agro.estime")}</em>` : ""}
+      ${d.approximation ? `<em class="agro-reserve">${t("agro.approx", { seuil: nombreFR(d.seuilMesure) })}</em>` : ""}
+    </li>`;
+  }).join("");
+
+  const sources = (window.sourcesProfil ? window.sourcesProfil(profilCultureCourante) : [])
+    .map(s => s.url ? `<a href="${echapperHTML(s.url)}" target="_blank" rel="noopener noreferrer">${echapperHTML(s.source)}</a>`
+      : echapperHTML(s.source)).join(" · ");
+  const trace = climatPret() ? window.Climat.tracabilite() : null;
+  const traceHTML = trace ? `<p class="agro-trace">${t("agro.trace", {
+    obs: echapperHTML(trace.sourceObservations || "?"),
+    periodeObs: echapperHTML(trace.periodeObservee || "?"),
+    proj: echapperHTML(trace.sourceProjections || "—"),
+    modeles: echapperHTML((trace.modeles || []).join(", ") || "—"),
+    scenario: echapperHTML(trace.scenario || "—"),
+    futur: echapperHTML(trace.periodeFuture || "—"),
+    resolution: echapperHTML(trace.resolution || "?"),
+    licence: echapperHTML(trace.licence || "?"),
+    recupere: echapperHTML(trace.recupere || "?"),
+  })}</p>` : "";
+
+  return `<details class="agro-detail"><summary>${t("agro.pourquoi")}</summary>
+    <ul class="agro-dims">${lignes}</ul>
+    ${sources ? `<p class="agro-sources">${t("agro.sources")} ${sources}</p>` : ""}
+    ${traceHTML}</details>`;
+}
+
+let profilCultureCourante = null;
+
+/** Ligne de tendance : une flèche, une phrase, et le détail sur demande. */
+function tendanceHTML(plante) {
+  const manuelle = projectionManuelle(plante);
+  if (manuelle) return sourceManuelleHTML(manuelle);
+
+  const profil = profilCulture(plante);
+  profilCultureCourante = profil;
+  if (!profil) return `<span class="proj-absente">${t("agro.tendance.indisponible")} — ${t("agro.raison.seuils_absents")}</span>`;
+  if (!climatPret() || !state.villeCoords) return `<span class="proj-absente">${t("horizon.sanscoords")}</span>`;
+
+  const statut = window.Climat.statut();
+  if (statut === "chargement" || statut === "inactif") {
+    return `<span class="proj-absente" id="proj-attente">${t("horizon.calcul")}</span>`;
   }
-  state._projectionEnCours = false;
-  state.projectionClimat = resultat;
-  // Échec possible pour une raison passagère (limite de requêtes de la source) :
-  // on autorise une nouvelle tentative plus tard plutôt que d'abandonner la session.
-  if (resultat === false) {
-    setTimeout(() => { if (state.projectionClimat === false) state.projectionClimat = null; }, 60000);
+  if (statut !== "pret") return `<span class="proj-absente">${t("agro.tendance.indisponible")} — ${t("agro.raison.source")}</span>`;
+
+  const compat = window.Climat.compatibilite(profil);
+  const tend = window.Climat.tendance(profil);
+  const sens = tend.sens;
+  const phrase = sens === "indisponible"
+    ? `${t("agro.tendance.indisponible")} — ${t("agro.raison." + (tend.raison || "pas_de_projection"))}`
+    : t("agro.tendance." + sens);
+  const reserves = (tend.reserves || []).length
+    ? `<span class="agro-reserves">${t("agro.reserve", {
+        dims: (tend.reserves || []).map(d => t(LIBELLE_DIMENSION[d] || d)).join(", ") })}</span>`
+    : "";
+  return `<span class="proj-tendance proj-${sens}">${phrase}</span>${reserves}
+    ${detailCompatibiliteHTML(compat, tend)}`;
+}
+
+/** Statut « éprouvé / expérimental » — relatif au lieu, jamais à une origine. */
+function statutAgroHTML(plante) {
+  const profil = profilCulture(plante);
+  if (profil && climatPret() && window.Climat.statut() === "pret") {
+    const compat = window.Climat.compatibilite(profil);
+    if (compat && compat.statut !== "nonEvalue") {
+      const emoji = { eprouve: "🏡", experimental: "🧪", incompatible: "🚫" }[compat.statut] || "•";
+      return `${emoji} ${t("agro.statut." + compat.statut)}`;
+    }
   }
-  // Met à jour la fiche ouverte, si elle attend encore la tendance.
-  const attente = document.querySelector("#proj-attente");
-  if (attente && plante) attente.outerHTML = projectionHTML(plante);
+  // Repli : appréciation qualitative héritée, annoncée comme telle.
+  const { statut } = statutCulture(plante);
+  const info = STATUT_INFO[statut] || STATUT_INFO.possible;
+  return `${info.emoji} ${t("statut." + statut)} <em class="agro-reserve">${t("agro.nonEvalue")}</em>`;
 }
 
 // Bloc « Chez toi » de la fiche : compatibilité aujourd'hui + horizon 5 ans.
 function blocChezToiHTML(plante) {
-  const { statut, cle } = statutCulture(plante);
-  if (plante.frileux && state.villeCoords && state.projectionClimat === null) {
-    chargerProjectionClimat(plante);           // non bloquant : la fiche s'affiche d'abord
-  }
-  const info = STATUT_INFO[statut] || STATUT_INFO.possible;
+  const { cle } = statutCulture(plante);
+  demarrerClimat();                      // non bloquant : la fiche s'affiche d'abord
   return `
       <div class="bloc bloc-chez-toi">
         <h4>${t("statut.titre", { zone: zoneCourte() })}</h4>
         <div class="fiche">
           <span class="k">${t("statut.aujourdhui")}</span>
-          <span class="v">${info.emoji} ${t("statut." + statut)}</span>
+          <span class="v">${statutAgroHTML(plante)}</span>
           <span class="k">${t("statut.horizon2")}</span>
-          <span class="v proj-valeur">${projectionHTML(plante)}</span>
+          <span class="v proj-valeur">${tendanceHTML(plante)}</span>
         </div>
         ${cle ? `<p class="statut-message">${t(cle)}</p>` : ""}
         <p class="pq-note">${t("statut.note")}</p>
       </div>`;
+}
+
+// La fiche ouverte se met à jour quand le climat arrive, sans la refermer.
+if (typeof document !== "undefined") {
+  document.addEventListener("climat:maj", () => {
+    const bloc = document.querySelector(".bloc-chez-toi");
+    if (!bloc || !state.planteOuverte) return;
+    bloc.outerHTML = blocChezToiHTML(state.planteOuverte);
+  });
 }
 
 // Question facultative, posée seulement une fois des résultats affichés.

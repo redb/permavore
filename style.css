@@ -854,3 +854,63 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .proj-stable, .proj-incertain { color: #6d5a33; }
 .proj-resume { display: block; font-weight: 400; margin-top: 3px; }
 .proj-source { display: block; font-weight: 400; font-size: 11.5px; color: var(--texte-doux); margin-top: 4px; }
+
+/* Baseline de marque : elle signe, elle n'explique pas. La consigne d'usage
+   vit juste au-dessus du formulaire, là où elle sert. */
+.hero .baseline{
+  margin:.15rem 0 0;
+  font-size:1.02rem;
+  letter-spacing:.02em;
+  opacity:.9;
+  font-style:italic;
+}
+.consigne{
+  margin:0 0 .9rem;
+  font-size:.95rem;
+  opacity:.85;
+}
+
+/* --- Compatibilité agroclimatique et tendance -------------------------- */
+.proj-favorable{color:#2f7a3e;font-weight:600}
+.proj-defavorable{color:#a4452c;font-weight:600}
+.proj-stable,.proj-contraste{color:#6b6357;font-weight:600}
+.proj-indisponible,.proj-absente{color:#7a7367;font-style:italic}
+.agro-reserves{display:block;font-size:.88rem;color:#6b6357;margin-top:.15rem}
+.agro-detail{margin-top:.4rem}
+.agro-detail summary{cursor:pointer;font-size:.9rem;color:#3f6b46;font-weight:600}
+.agro-dims{list-style:none;margin:.5rem 0 0;padding:0;display:grid;gap:.4rem}
+.agro-dim{display:flex;flex-wrap:wrap;gap:.35rem;align-items:baseline;
+  font-size:.9rem;padding:.35rem .5rem;border-radius:8px;background:rgba(0,0,0,.03)}
+.agro-dim.agro-favorable{border-left:3px solid #4a8c58}
+.agro-dim.agro-limite{border-left:3px solid #c99a3b}
+.agro-dim.agro-defavorable{border-left:3px solid #b3573a}
+.agro-nom{font-weight:600}
+.agro-valeurs{opacity:.85}
+.agro-fleche{font-weight:600}
+.agro-gain,.agro-amelioration{color:#2f7a3e}
+.agro-perte,.agro-degradation{color:#a4452c}
+.agro-reserve{display:block;width:100%;font-size:.82rem;opacity:.75;font-style:italic}
+.agro-sources,.agro-trace{font-size:.8rem;opacity:.75;margin:.5rem 0 0;line-height:1.45}
+.agro-sources a{color:inherit}
+
+/* --- Bulle de signalement ---------------------------------------------- */
+.signalement-bulle{position:fixed;right:1rem;bottom:1rem;z-index:60;
+  width:46px;height:46px;border-radius:50%;border:none;cursor:pointer;
+  background:#3f6b46;color:#fff;font-size:1.25rem;line-height:1;
+  box-shadow:0 3px 12px rgba(0,0,0,.25)}
+.signalement-bulle:hover{background:#4a8c58}
+.signalement-panneau{position:fixed;right:1rem;bottom:4.2rem;z-index:61;
+  width:min(360px,calc(100vw - 2rem));background:#fffdf8;color:#2e2a24;
+  border:1px solid rgba(0,0,0,.12);border-radius:14px;padding:.9rem;
+  box-shadow:0 8px 28px rgba(0,0,0,.22);display:grid;gap:.4rem}
+.signalement-entete{display:flex;justify-content:space-between;align-items:center}
+.signalement-fermer{border:none;background:none;cursor:pointer;font-size:1rem;opacity:.6}
+.signalement-label{font-size:.85rem;font-weight:600}
+.signalement-panneau textarea,.signalement-panneau input{width:100%;
+  border:1px solid rgba(0,0,0,.2);border-radius:8px;padding:.45rem;
+  font:inherit;font-size:.9rem;background:#fff}
+.signalement-contexte{font-size:.8rem;opacity:.8}
+.signalement-contexte pre{white-space:pre-wrap;word-break:break-word;
+  font-size:.72rem;background:rgba(0,0,0,.04);padding:.4rem;border-radius:6px;margin:.3rem 0 0}
+.signalement-etat{font-size:.85rem;margin:.2rem 0 0;min-height:1.1em}
+@media (max-width:480px){.signalement-bulle{right:.7rem;bottom:.7rem}}

@@ -51,7 +51,7 @@
       <div class="lang-switch" id="lang-switch" role="group" aria-label="Langue / Language"></div>
     </div>
     <h1 id="hero-titre">Que planter chez toi ?</h1>
-    <p id="hero-intro">Indique où se trouve ton jardin pour découvrir ce que tu peux planter maintenant.</p>
+    <p id="hero-intro" class="baseline">Pour les jardiniers d'hier et de demain</p>
     <div class="date-jour" id="date-jour" hidden>📅 …</div>
   </header>
 
@@ -63,6 +63,7 @@
 
   <section class="panneau">
     <form class="panneau-inner entree" id="form-entree" novalidate>
+      <p id="form-consigne" class="consigne">Indique où se trouve ton jardin pour découvrir ce que tu peux planter maintenant.</p>
       <div class="champ champ-ville">
         <label for="ville" id="label-ville">📍 Où est ton jardin ?</label>
         <div class="ville-ligne">
@@ -214,8 +215,10 @@
   <script src="lune.js"></script>
   <script src="sachets.js"></script>
   <script src="jardin.js"></script>
-  <script src="climat.js"></script>
+  <script src="agronomie.js"></script>
   <script src="app.js"></script>
+  <script type="module" src="climat.js"></script>
   <script type="module" src="network.js"></script>
+  <script src="signalement.js" defer></script>
 </body>
 </html>

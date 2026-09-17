@@ -6,6 +6,6 @@
   "scripts": {
     "serve": "npx serve .",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check app.js && node --check data.js && node --check network.js && node --check network-core.mjs"
+    "check": "node --check app.js && node --check data.js && node --check network.js && node --check network-core.mjs && node --check climat-core.mjs && node --check climat.js && node --check functions/api/climat.js"
   }
 }
