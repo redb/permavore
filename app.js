@@ -46,6 +46,14 @@ function sauverAdoptees() {
 }
 function estAdoptee(id) { return state.adoptees.has(id); }
 
+// Au démarrage : reprise de l'ancien stockage vers les InstanceCulture, puis
+// state.adoptees devient une simple vue de ces instances.
+function initialiserInstances() {
+  if (typeof window === "undefined" || !window.Instances) return;
+  migrerVersInstances();
+  synchroniserDepuisInstances();
+}
+
 // ---------- Mes ressources (ce que le jardinier possède) ----------
 const LS_RESSOURCES = "permavore.ressources";
 function chargerRessources() {
@@ -400,6 +408,181 @@ function supprimerPlante(id) {
   sauverPlantesPerso();
   fermerModale(); rendre();
 }
+// ---------------------------------------------------------------------------
+// Enraciner — création d'une InstanceCulture (BDR-025).
+//
+// « Enraciner » veut dire : cette culture fait désormais partie de mon jardin,
+// réel ou projeté. Elle crée une instance datée et située ; elle ne touche
+// jamais à la fiche botanique de la culture.
+//
+// state.adoptees n'est plus un stockage mais une VUE des instances actives,
+// conservée parce que le reste de l'application s'y réfère encore.
+// ---------------------------------------------------------------------------
+
+const instancesDisponibles = () => typeof window !== "undefined" && window.Instances;
+
+function synchroniserDepuisInstances() {
+  if (!instancesDisponibles()) return;
+  state.adoptees = new Set(window.Instances.culturesEnracinees());
+  sauverAdoptees();
+  majMonPotager();
+}
+
+// Reprise unique de l'ancien stockage « adoptées + date unique ».
+function migrerVersInstances() {
+  if (!instancesDisponibles()) return;
+  const reprises = window.Instances.migrerAdoptees([...state.adoptees], state.dates);
+  if (reprises) synchroniserDepuisInstances();
+}
+
+const LS_ENR_VU = "permavore.enraciner.vu";
+function premierEnracinement() {
+  try { return localStorage.getItem(LS_ENR_VU) !== "1"; } catch { return false; }
+}
+function marquerEnracinementVu() {
+  try { localStorage.setItem(LS_ENR_VU, "1"); } catch { /* sans importance */ }
+}
+
+/** Libellé lisible de la date d'une instance, selon sa précision. */
+function libelleDepuis(instance) {
+  const prefixe = instance.etat === "prevu" ? "enr.prevu." : "enr.depuis.";
+  const p = instance.depuis?.precision || "inconnue";
+  return t(prefixe + p, { valeur: echapperHTML(instance.depuis?.valeur || "") });
+}
+
+const ETATS_PROPOSES = ["dejaPresent", "plante", "seme", "prevu"];
+const DATES_PROPOSEES = ["exacte", "mois", "saison", "annee", "anneeApprox", "inconnue"];
+
+/**
+ * Panneau d'enracinement. Deux gestes suffisent après l'ouverture : un état,
+ * puis une date — « je ne sais pas » comprise. Le reste est facultatif et
+ * replié.
+ */
+function ouvrirEnracinement(cultureId) {
+  const plante = PLANTES.find(p => p.id === cultureId);
+  if (!plante || !instancesDisponibles()) return;
+  document.getElementById("enr-panneau")?.remove();
+
+  const nom = echapperHTML(txt(plante.nom));
+  const existantes = window.Instances.instancesDe(cultureId).filter(i => i.etat !== "termine");
+
+  const p = document.createElement("div");
+  p.id = "enr-panneau";
+  p.className = "enr-panneau";
+  p.setAttribute("role", "dialog");
+  p.setAttribute("aria-modal", "true");
+  p.setAttribute("aria-label", t("enr.titre"));
+  p.innerHTML = `
+    <div class="enr-boite">
+      <div class="enr-entete">
+        <strong>${t("enr.titre")}</strong>
+        <button type="button" class="enr-fermer" aria-label="${t("enr.fermer")}">✕</button>
+      </div>
+      ${premierEnracinement() ? `<p class="enr-aide">${t("enr.aide")}</p>` : ""}
+      ${existantes.length ? `<div class="enr-existantes">
+        <span class="enr-label">${t("enr.deja")}</span>
+        ${existantes.map(i => `<div class="enr-existante">
+          <span>${t("enr.etat." + i.etat)} · ${libelleDepuis(i)}</span>
+          <button type="button" class="enr-supprimer" data-instance="${i.id}">${t("enr.deraciner")}</button>
+        </div>`).join("")}</div>` : ""}
+      <p class="enr-question">${t("enr.etat.question", { nom })}</p>
+      <div class="enr-chips" id="enr-etats">
+        ${ETATS_PROPOSES.map(e => `<button type="button" class="enr-chip" data-etat="${e}">${t("enr.etat." + e)}</button>`).join("")}
+      </div>
+      <div id="enr-etape-date" hidden>
+        <p class="enr-question" id="enr-question-date"></p>
+        <div class="enr-chips" id="enr-dates">
+          ${DATES_PROPOSEES.map(d => `<button type="button" class="enr-chip" data-date="${d}">${t("enr.date." + d)}</button>`).join("")}
+        </div>
+        <div class="enr-annee" id="enr-annee" hidden>
+          <input type="number" id="enr-annee-champ" min="1900" max="2100" step="1"
+            placeholder="${t("enr.date.anneeInvite")}" />
+          <button type="button" class="btn-principal" id="enr-annee-ok">${t("enr.valider")}</button>
+        </div>
+        <details class="enr-details">
+          <summary>${t("enr.details")}</summary>
+          <label class="enr-label" for="enr-emplacement">${t("enr.emplacement")}</label>
+          <input type="text" id="enr-emplacement" maxlength="80" />
+          <label class="enr-label" for="enr-surface">${t("enr.surface")}</label>
+          <input type="number" id="enr-surface" min="0" step="0.5" />
+          <label class="enr-label" for="enr-quantite">${t("enr.quantite")}</label>
+          <input type="number" id="enr-quantite" min="0" step="1" />
+        </details>
+      </div>
+    </div>`;
+  document.body.appendChild(p);
+
+  const fermer = () => p.remove();
+  p.addEventListener("click", (e) => { if (e.target === p) fermer(); });
+  p.querySelector(".enr-fermer").addEventListener("click", fermer);
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape" && p.isConnected) { fermer(); document.removeEventListener("keydown", esc); }
+  });
+
+  p.querySelectorAll(".enr-supprimer").forEach(b => b.addEventListener("click", () => {
+    window.Instances.deraciner(b.dataset.instance);
+    synchroniserDepuisInstances();
+    fermer(); rendre();
+  }));
+
+  let etatChoisi = null;
+  p.querySelectorAll("#enr-etats .enr-chip").forEach(b => b.addEventListener("click", () => {
+    etatChoisi = b.dataset.etat;
+    p.querySelectorAll("#enr-etats .enr-chip").forEach(x => x.classList.toggle("actif", x === b));
+    const etape = p.querySelector("#enr-etape-date");
+    etape.hidden = false;
+    p.querySelector("#enr-question-date").textContent =
+      t(etatChoisi === "prevu" ? "enr.quand.futur" : "enr.quand.passe");
+    p.querySelector("#enr-annee").hidden = true;
+  }));
+
+  const valider = (precision, valeur) => {
+    const lire = (sel) => {
+      const v = Number(p.querySelector(sel)?.value);
+      return Number.isFinite(v) && v > 0 ? v : undefined;
+    };
+    window.Instances.enraciner(cultureId, {
+      etat: etatChoisi || "plante",
+      depuis: { precision, valeur },
+      emplacement: p.querySelector("#enr-emplacement")?.value.trim() || null,
+      surface: lire("#enr-surface"),
+      quantite: lire("#enr-quantite"),
+    });
+    marquerEnracinementVu();
+    synchroniserDepuisInstances();
+    fermer();
+    rendre();
+  };
+
+  p.querySelectorAll("#enr-dates .enr-chip").forEach(b => b.addEventListener("click", () => {
+    const d = b.dataset.date;
+    if (d === "anneeApprox") {
+      p.querySelector("#enr-annee").hidden = false;
+      p.querySelector("#enr-annee-champ").focus();
+      return;
+    }
+    const aujourdhui = dateISOAujourdhui();
+    const valeurs = {
+      exacte: aujourdhui,
+      mois: aujourdhui.slice(0, 7),
+      // « Cette saison » n'est pas nommée : sous les tropiques et dans
+      // l'hémisphère sud, nommer la saison serait faux. On ancre sur la date
+      // du jour et on n'affiche que « cette saison ».
+      saison: aujourdhui,
+      annee: aujourdhui.slice(0, 4),
+      inconnue: null,
+    };
+    valider(d, valeurs[d]);
+  }));
+
+  p.querySelector("#enr-annee-ok").addEventListener("click", () => {
+    const annee = p.querySelector("#enr-annee-champ").value.trim();
+    valider(annee ? "anneeApprox" : "inconnue", annee || null);
+  });
+
+  p.querySelector("#enr-etats .enr-chip")?.focus();
+}
+
 function basculerAdoption(id) {
   if (state.adoptees.has(id)) {
     state.adoptees.delete(id);
@@ -970,18 +1153,20 @@ function creerCarte(plante) {
   return c;
 }
 
-// Attache le bouton "adopter" (coche) présent dans le noeud
+// Bouton « Enraciner » des cartes. Il n'ajoute plus en un clic muet : il ouvre
+// le panneau, qui demande l'état et la date — ou « je ne sais pas ».
 function wireAdopt(node, plante) {
   const b = node.querySelector("[data-adopt]");
   if (!b) return;
   b.addEventListener("click", e => {
     e.stopPropagation();
-    basculerAdoption(plante.id);
-    rendre();
+    if (instancesDisponibles()) ouvrirEnracinement(plante.id);
+    else { basculerAdoption(plante.id); rendre(); }   // repli si le module manque
   });
 }
 
 function ouvrirModale(plante) {
+  state.planteOuverte = plante;      // pour rafraîchir « Chez toi » à l'arrivée du climat
   const c = CYCLES[plante.cycle], d = DIFFICULTES[plante.diff];
   const enc = ENCOMBREMENTS[plante.encombrement], sol = SOLEILS[plante.soleil];
   const statut = state._statut(plante);
@@ -1121,6 +1306,7 @@ function ouvrirModale(plante) {
 function fermerModale() {
   $("#overlay").classList.remove("ouvert");
   document.body.style.overflow = "";
+  state.planteOuverte = null;
 }
 
 // ---------- Formulaire d'ajout d'une plante ----------
@@ -1553,6 +1739,7 @@ function dateDuJour() {
 }
 
 function rendre() {
+  demarrerClimat();   // non bloquant : les recommandations sortent d'abord
   const aujourdhui = dateDuJour();
   const moisCourant = aujourdhui.getMonth() + 1;
   state._statut = p => statutPlantation(p, state.zone, moisCourant);
@@ -2092,6 +2279,7 @@ function init() {
 
   chargerAdoptees();
   chargerDates();
+  initialiserInstances();     // reprise de l'ancien stockage, puis vue synchronisée
   chargerCachePhotos();
   chargerPlantesPerso();
   $("#btn-ajouter").addEventListener("click", () => ouvrirFormAjout(""));
@@ -2483,6 +2671,7 @@ function detailCompatibiliteHTML(compat, tend) {
     return `<li class="agro-dim agro-${d.etat}">
       <span class="agro-nom">${t(LIBELLE_DIMENSION[cle] || cle)}</span>
       <span class="agro-valeurs">${chez}${requis ? " · " + requis : ""}</span>${fleche}
+      ${d.nonEvaluable ? `<em class="agro-reserve">${t("agro.nonEvaluable", { seuil: nombreFR(d.seuilCulture) })}</em>` : ""}
       ${d.derive ? `<em class="agro-reserve">${t("agro.derive")}</em>` : ""}
       ${d.estimation ? `<em class="agro-reserve">${t("agro.estime")}</em>` : ""}
       ${d.approximation ? `<em class="agro-reserve">${t("agro.approx", { seuil: nombreFR(d.seuilMesure) })}</em>` : ""}

@@ -914,3 +914,36 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
   font-size:.72rem;background:rgba(0,0,0,.04);padding:.4rem;border-radius:6px;margin:.3rem 0 0}
 .signalement-etat{font-size:.85rem;margin:.2rem 0 0;min-height:1.1em}
 @media (max-width:480px){.signalement-bulle{right:.7rem;bottom:.7rem}}
+
+/* --- Enraciner : panneau de création d'une InstanceCulture -------------- */
+.enr-panneau{position:fixed;inset:0;z-index:70;display:flex;align-items:center;
+  justify-content:center;padding:1rem;background:rgba(30,26,20,.45)}
+.enr-boite{width:min(420px,100%);max-height:88vh;overflow:auto;background:#fffdf8;
+  color:#2e2a24;border-radius:16px;padding:1rem;box-shadow:0 12px 36px rgba(0,0,0,.3);
+  display:grid;gap:.5rem}
+.enr-entete{display:flex;justify-content:space-between;align-items:center}
+.enr-fermer{border:none;background:none;cursor:pointer;font-size:1rem;opacity:.6}
+.enr-aide{margin:0;font-size:.88rem;opacity:.8;font-style:italic}
+.enr-question{margin:.4rem 0 0;font-weight:600;font-size:.95rem}
+.enr-chips{display:flex;flex-wrap:wrap;gap:.4rem}
+.enr-chip{border:1px solid rgba(0,0,0,.18);background:#fff;border-radius:999px;
+  padding:.5rem .85rem;font:inherit;font-size:.92rem;cursor:pointer;min-height:40px}
+.enr-chip:hover{border-color:#4a8c58}
+.enr-chip.actif{background:#3f6b46;color:#fff;border-color:#3f6b46}
+.enr-annee{display:flex;gap:.4rem;margin-top:.5rem}
+.enr-annee input{flex:1;min-width:0}
+.enr-details{margin-top:.5rem;font-size:.9rem}
+.enr-details summary{cursor:pointer;color:#3f6b46;font-weight:600}
+.enr-label{display:block;font-size:.85rem;font-weight:600;margin-top:.4rem}
+.enr-boite input{width:100%;border:1px solid rgba(0,0,0,.2);border-radius:8px;
+  padding:.5rem;font:inherit;background:#fff;min-height:40px}
+.enr-existantes{background:rgba(0,0,0,.04);border-radius:10px;padding:.5rem}
+.enr-existante{display:flex;justify-content:space-between;align-items:center;
+  gap:.5rem;font-size:.9rem;padding:.2rem 0}
+.enr-supprimer{border:none;background:none;color:#a4452c;cursor:pointer;
+  font:inherit;font-size:.85rem;text-decoration:underline}
+@media (max-width:480px){
+  .enr-boite{width:100%;max-height:92vh}
+  .enr-chip{flex:1 1 calc(50% - .4rem)}
+}
+.agro-dim.agro-inconnu{border-left:3px solid #8a8378}

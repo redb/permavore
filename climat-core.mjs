@@ -500,6 +500,27 @@ export function compatibiliteActuelle(culture, profilLieu) {
     }
   }
 
+  // --- besoin de chaleur : une culture peut manquer de chaleur, pas seulement
+  // en avoir trop. Attention : la zone de chaleur AHS décrit ce que le LIEU
+  // inflige, jamais ce qu'une culture RÉCLAME — elle ne sert donc pas ici.
+  // Nous savons qu'un seuil existe, mais aucune source ne dit COMBIEN de jours
+  // au-dessus sont nécessaires : la dimension est donc documentée et non
+  // évaluable, ce qui interdit de conclure « éprouvé » sans l'interdire tout court.
+  if (valeurUtilisable(c.chaleur?.seuilMinCroissance)) {
+    const seuil = c.chaleur.seuilMinCroissance.valeur;
+    const dispo = Object.keys(profilLieu.joursAuDessus || {}).map(Number);
+    const proche = dispo.length
+      ? dispo.reduce((a, b) => Math.abs(b - seuil) < Math.abs(a - seuil) ? b : a) : null;
+    if (proche !== null && Number.isFinite(profilLieu.joursAuDessus[proche])) {
+      dimensions.besoinChaleur = {
+        etat: "inconnu", nonEvaluable: true,
+        lieu: profilLieu.joursAuDessus[proche], seuilCulture: seuil, seuilMesure: proche,
+        unite: "jours", bloquant: false, source: c.chaleur.seuilMinCroissance,
+        approximation: proche !== seuil,
+      };
+    }
+  }
+
   // --- eau : une réserve, pas un verdict — presque tout se corrige en arrosant
   if (Number.isFinite(profilLieu.deficitHydriqueSaisonChaude)
       && valeurUtilisable(c.eau?.sensibiliteDeficit)) {
@@ -518,6 +539,9 @@ export function compatibiliteActuelle(culture, profilLieu) {
   if (documentees >= 2) {
     if (liste.some(d => d.bloquant && d.etat === "defavorable")) statut = "incompatible";
     else if (liste.some(d => d.etat === "limite" || d.etat === "defavorable")) statut = "experimental";
+    // Une exigence documentée mais non évaluable interdit « éprouvé » : on ne
+    // peut pas déclarer une culture sûre sur les seules dimensions mesurables.
+    else if (liste.some(d => d.etat === "inconnu")) statut = "experimental";
     else statut = "eprouve";
   }
 

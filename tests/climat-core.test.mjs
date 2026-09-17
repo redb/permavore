@@ -169,3 +169,20 @@ test("la fenêtre future glisse avec le temps", () => {
   assert.deepEqual(fenetres(new Date("2026-06-01")).futur, { debut: 2031, fin: 2040 });
   assert.deepEqual(fenetres(new Date("2031-06-01")).futur, { debut: 2036, fin: 2045 });
 });
+
+test("une exigence documentée mais non mesurable interdit le classement « éprouvé »", () => {
+  // Cas de la patate douce en climat tempéré : la saison sans gel suffit
+  // largement, mais la culture réclame une chaleur dont aucune source ne dit
+  // combien de jours elle exige. Conclure « éprouvé » serait un faux positif.
+  const tempere = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+  const culture = {
+    cycle: { joursMaturite: source(120, "jours") },
+    chaleur: { seuilMinCroissance: source(25, "°C") },
+    eau: { sensibiliteDeficit: source(1, "1-3") },
+  };
+  const r = compatibiliteActuelle(culture, tempere);
+  assert.equal(r.statut, "experimental");
+  assert.equal(r.dimensions.besoinChaleur.etat, "inconnu");
+  assert.equal(r.dimensions.besoinChaleur.nonEvaluable, true);
+  assert.equal(r.dimensions.cycle.etat, "favorable", "le gel n'est pas le facteur limitant");
+});

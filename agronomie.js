@@ -49,11 +49,10 @@ const PROFILS_AGROCLIMATIQUES = {
         source: "Mississippi State University Extension, P2809 — Sweetpotato Storage Root Initiation",
         url: "https://extension.msstate.edu/publications/sweetpotato-storage-root-initiation", annee: 2023,
         note: "Au-delà de 40 °C le jour (32 °C la nuit), l'initiation des racines de réserve décroche. L'optimum est 29–32 °C le jour." },
-      // Documenté mais non exploité par le moteur : en dessous de 25 °C le jour
-      // et 17 °C la nuit, l'initiation décroche AUSSI (même source). C'est le
-      // seuil qui limite réellement la patate douce en climat tempéré ; il
-      // faudrait un indicateur « jours assez chauds pendant les 30 jours qui
-      // suivent la plantation », que le profil de lieu ne calcule pas encore.
+      seuilMinCroissance: { valeur: 25, unite: "°C", confiance: "haute",
+        source: "Mississippi State University Extension, P2809 — Sweetpotato Storage Root Initiation",
+        url: "https://extension.msstate.edu/publications/sweetpotato-storage-root-initiation", annee: 2023,
+        note: "En dessous de 25 °C le jour et 17 °C la nuit, l'initiation des racines de réserve décroche — c'est le facteur qui limite réellement la patate douce en climat tempéré, bien plus que le gel. Aucune source ne dit COMBIEN de jours au-dessus de ce seuil sont nécessaires : le moteur affiche donc la mesure locale sans en tirer de verdict, et s'interdit de classer la culture « éprouvée »." },
     },
     eau: {
       sensibiliteDeficit: { valeur: 1, unite: "1 faible – 3 forte", confiance: "moyenne",

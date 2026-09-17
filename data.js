@@ -1,6 +1,17 @@
 /* =========================================================================
    Jardin Nourricier — base de données plantes + zones climatiques
-   Données éditoriales (à valider / enrichir). Calendrier = France métropole.
+   Données éditoriales (à valider / enrichir). Calendrier = France métropolitaine — HÉRITÉ, à ne pas étendre
+
+   ATTENTION : les fenêtres de semis ci-dessous sont exprimées en mois du
+   calendrier français et décalées par grandes zones. Ce mécanisme est
+   conservé pour la compatibilité de l'interface existante, mais il est
+   HÉRITÉ : il est faux dans l'hémisphère sud et vide de sens sous les
+   tropiques. Ne pas l'étendre aux nouvelles données en le présentant comme
+   mondial. Le calendrier cible doit résulter de :
+       profil agroclimatique de la culture (agronomie.js)
+     × climat local par coordonnées (climat-core.mjs, functions/api/climat.js)
+     × conditions de la saison en cours,
+   et non d'un mois inscrit en dur.
    Les fenêtres de semis/plantation sont exprimées en mois [début, fin]
    pour une zone TEMPÉRÉE de référence, puis décalées selon la zone.
 
@@ -577,6 +588,26 @@ const PLANTES = [
     conseils:[bi("Planter à racines nues en hiver.","Plant bare-root in winter."),
       bi("Tailler en hiver pour aérer et renouveler.","Prune in winter to open up and renew the bush."),
       bi("Filet anti-oiseaux à l'approche de la récolte.","Bird netting as harvest approaches.")] },
+
+  { id:"cassis", nom:bi("Cassis","Blackcurrant"), latin:"Ribes nigrum", cat:"fruit", typeLunaire:"fruit", famille:"Grossulariacées", emoji:"🫐",
+    cycle:"vivace", diff:1, encombrement:"moyen", soleil:"mi-ombre", densite:1, espacement:bi("1,5 m","5 ft"),
+    semis:[[10,12],[2,3]], mode:"plant", recolte:bi("Juillet","July"),
+    court:bi("Baie noire très riche en vitamine C, rustique et peu exigeante.","A very vitamin-C-rich black berry, hardy and undemanding."),
+    long:bi("Le cassissier se plante en repos végétatif, d'octobre à mars. Ses racines sont superficielles : il souffre vite de la sécheresse, et un manque d'eau de quelques jours au moment où se forment les futures fleurs ampute la récolte de l'année suivante. La taille d'hiver renouvelle le bois, car les meilleures grappes viennent des pousses de l'année précédente.",
+      "Blackcurrants are planted while dormant, from October to March. Their roots are shallow, so they suffer quickly from drought: a few dry days while next year's flowers are forming will cut the following harvest. Winter pruning renews the wood, since the best clusters come from the previous year's shoots."),
+    conseils:[bi("Pailler généreusement : les racines sont superficielles.","Mulch generously — the roots are shallow."),
+      bi("Arroser sans faute pendant l'été qui suit la floraison.","Water without fail during the summer after flowering."),
+      bi("Tailler en hiver le bois de plus de trois ans.","In winter, cut out wood older than three years.")] },
+
+  { id:"pommier", nom:bi("Pommier","Apple tree"), latin:"Malus domestica", cat:"fruit", typeLunaire:"fruit", famille:"Rosacées", emoji:"🍎",
+    cycle:"vivace", diff:2, encombrement:"gourmand", soleil:"plein", densite:1, espacement:bi("4 m","13 ft"),
+    semis:[[11,12],[1,3]], mode:"plant", recolte:bi("Août → octobre selon la variété","August → October depending on variety"),
+    court:bi("L'arbre fruitier de garde par excellence, à installer une fois pour des décennies.","The keeping fruit tree par excellence — planted once, for decades."),
+    long:bi("Le pommier se plante à racines nues en repos végétatif. Il lui faut un hiver assez froid pour lever sa dormance : c'est le critère qui décide où il peut pousser, bien plus que la chaleur d'été. La plupart des variétés ont besoin d'une seconde variété proche pour être pollinisées. Compter trois à cinq ans avant une vraie récolte.",
+      "Apple trees are planted bare-root while dormant. They need a cold enough winter to break dormancy — that requirement, far more than summer heat, decides where they can grow. Most varieties need a second variety nearby for pollination. Expect three to five years before a real harvest."),
+    conseils:[bi("Prévoir une seconde variété pour la pollinisation.","Plan a second variety for pollination."),
+      bi("Choisir une variété selon le froid hivernal de ton lieu.","Choose a variety to match your winter chill."),
+      bi("Tailler en hiver, hors période de gel.","Prune in winter, outside frost spells.")] },
 
   { id:"figuier", nom:bi("Figuier","Fig tree"), latin:"Ficus carica", cat:"exotique", typeLunaire:"fruit", famille:"Moracées", emoji:"🌳",
     cycle:"vivace", diff:1, encombrement:"gourmand", soleil:"plein", densite:0.1, espacement:bi("3–4 m","10–13 ft"),
