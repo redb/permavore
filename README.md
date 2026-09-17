@@ -13,6 +13,11 @@ mettent en avant **À planter maintenant**, puis **Bientôt** et **Autres cultur
 adaptées**. Les outils (recherche, filtres, Mon potager, ressources, ajout, photo de
 sachet, identification, plan) arrivent ensuite, repliés ou quand ils deviennent utiles.
 
+La fiche d'une culture frileuse affiche une **tendance climatique locale** calculée
+depuis l'API Climate d'Open-Meteo (CMIP6, CC BY 4.0), avec sa traçabilité complète —
+et « incertitude importante » dès que les modèles divergent ou que l'écart reste dans
+la variabilité interannuelle.
+
 Deux curseurs de préférences (🌺 Agrément ↔ 🥔 Nourricier, 🏡 Local éprouvé ↔ 🌍 Exotique
 expérimental) réordonnent les propositions sans jamais filtrer.
 

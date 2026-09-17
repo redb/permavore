@@ -190,3 +190,48 @@ Brique manquante côté agronomie : les **seuils par culture** (jours > 30 °C r
 durée de saison sans gel, besoins en froid hivernal). Sans eux, une projection
 climatique ne peut pas être traduite en « plus ou moins favorable » pour une culture
 donnée — c'est là que l'expertise d'un agroclimatologue a le plus de valeur.
+
+## 11. Tendance climatique locale — branchée (2026-09-17)
+
+`climat.js` interroge l'**API Climate d'Open-Meteo** (CMIP6 HighResMIP, modèles
+20–51 km descendus à 10 km, 1950–2050, scénario « au plus proche de RCP 8.5 »,
+CC BY 4.0, sans clé pour un usage non commercial) aux coordonnées de la commune.
+
+**Indicateurs calculés** (par année, puis moyennés par fenêtre, 2 modèles) :
+durée de la saison sans gel (tmin ≤ 0 °C), jours chauds (tmax > 30 °C), minimum
+hivernal. La variabilité interannuelle (écart-type) est calculée sur la référence.
+
+**Fenêtres : 20 ans** — `2005-2024` contre `2030-2049`. À 5 ans, l'écart
+climatique est plus petit que la variabilité d'une année à l'autre : l'annoncer
+serait du bruit. Première version testée sur 10 ans : elle donnait à Rumilly une
+saison sans gel *raccourcie* de 6 jours alors que les jours chauds augmentaient —
+incohérence physique, donc bruit. L'interface le dit : « Comparaison sur 20 ans :
+à 5 ans, l'écart climatique est plus petit que la variabilité entre deux années. »
+
+**Règles de conclusion** — une tendance n'est affichée que si :
+1. la culture est documentée comme craignant le gel (`frileux`), donc limitée par
+   la chaleur : c'est le seul lien que les données permettent d'établir. Sinon :
+   « projection non calculée — besoins thermiques non renseignés » ;
+2. les deux modèles vont dans le même sens ;
+3. l'écart dépasse `max(7 jours, variabilité interannuelle)`.
+
+Sinon : « incertitude importante », avec la raison (désaccord des modèles, ou
+écart dans la variabilité). Une forte hausse des jours chauds ajoute toujours la
+réserve « plus de stress thermique et d'arrosage » : **le réchauffement n'est
+jamais présenté comme un gain net**.
+
+Exemples mesurés le 2026-09-17 :
+
+| Commune | Saison sans gel | Jours > 30 °C | Verdict |
+|---|---|---|---|
+| Rumilly (74) | 234 → 242 j | 11,5 → 22 | favorable, avec réserve chaleur |
+| Montpellier (34) | 309,5 → 317 j | 28 → 44,5 | incertain (modèles en désaccord) |
+
+**Limites assumées** : 2 modèles seulement ; seuils de gel et de chaleur
+génériques (0 °C, 30 °C) et non spécifiques à chaque culture ; aucun indicateur
+de sécheresse, de précipitations ni de besoins en froid hivernal. Une entrée
+saisie à la main dans `PROJECTIONS_CLIMAT` reste prioritaire sur ce calcul.
+
+**Prochaine brique, la plus utile** : les seuils agronomiques par culture (jours
+chauds nécessaires, durée de saison sans gel, besoins en froid). Sans eux, aucune
+projection ne peut être traduite en « favorable » pour une culture donnée.

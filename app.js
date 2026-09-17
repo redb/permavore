@@ -26,6 +26,7 @@ const state = {
   objectif: null,            // priorité facultative du jardinier (persistée), cf. OBJECTIFS
   curseurNourricier: 0.7,    // 0 = 🌺 agrément … 1 = 🥔 nourricier (persisté)
   curseurExperimental: 0.25, // 0 = 🏡 local éprouvé … 1 = 🌍 exotique expérimental (persisté)
+  projectionClimat: null,    // indicateurs Open-Meteo pour le point courant (session)
   objectifMasque: false,     // l'utilisateur a écarté la question (persisté)
   invitePlanMasquee: false,  // « Dessine ton jardin » écarté (persisté)
   filtresOuverts: false,     // panneau de filtres déplié
@@ -2430,22 +2431,74 @@ function projectionClimat(plante, zone = state.zone) {
   return (parZone && parZone[plante.id]) || null;
 }
 function projectionHTML(plante) {
-  const p = projectionClimat(plante);
-  if (!p) return `<span class="proj-absente">${t("horizon.indisponible")}</span>`;
-  const cle = ["favorable", "stable", "defavorable"].includes(p.tendance) ? p.tendance : "incertain";
+  const p = projectionClimat(plante);          // entrée sourcée saisie à la main : priorité
+  if (p) {
+    const cle = ["favorable", "stable", "defavorable"].includes(p.tendance) ? p.tendance : "incertain";
+    return `<span class="proj-tendance proj-${cle}">${t("horizon.tendance." + cle)}</span>
+      <span class="proj-resume">${echapperHTML(p.resume || "")}</span>
+      <span class="proj-source">${t("horizon.source", {
+        source: echapperHTML(p.source || "?"), scenario: echapperHTML(p.scenario || "?"),
+        reference: echapperHTML(p.periodeReference || "?"), horizon: echapperHTML(p.horizon || "?"),
+        resolution: echapperHTML(p.resolution || "?"), maj: echapperHTML(p.miseAJour || "?"),
+        confiance: t("horizon.confiance." + (["faible", "moyenne", "elevee"].includes(p.confiance) ? p.confiance : "faible")),
+      })}</span>`;
+  }
+  // Sinon : tendance calculée depuis Open-Meteo, UNIQUEMENT pour une culture dont la
+  // base documente qu'elle craint le gel (donc limitée par la chaleur).
+  if (!plante.frileux) return `<span class="proj-absente">${t("horizon.nondocumente")}</span>`;
+  if (!state.villeCoords) return `<span class="proj-absente">${t("horizon.sanscoords")}</span>`;
+  const proj = state.projectionClimat;
+  if (proj === null) return `<span class="proj-absente" id="proj-attente">${t("horizon.calcul")}</span>`;
+  if (proj === false) return `<span class="proj-absente">${t("horizon.indisponible2")}</span>`;
+
+  const d = tendanceChaleur(proj.reference, proj.horizon, proj.accord);
+  const cle = d.tendance;
+  const indicateurs = t("horizon.indicateurs", {
+    refSaison: proj.reference.saisonSansGel, horSaison: proj.horizon.saisonSansGel,
+    refChauds: proj.reference.joursChauds, horChauds: proj.horizon.joursChauds,
+    refMin: nombreFR(proj.reference.minimum), horMin: nombreFR(proj.horizon.minimum),
+  });
   return `<span class="proj-tendance proj-${cle}">${t("horizon.tendance." + cle)}</span>
-    <span class="proj-resume">${echapperHTML(p.resume || "")}</span>
-    <span class="proj-source">${t("horizon.source", {
-      source: echapperHTML(p.source || "?"), scenario: echapperHTML(p.scenario || "?"),
-      reference: echapperHTML(p.periodeReference || "?"), horizon: echapperHTML(p.horizon || "?"),
-      resolution: echapperHTML(p.resolution || "?"), maj: echapperHTML(p.miseAJour || "?"),
-      confiance: t("horizon.confiance." + (["faible", "moyenne", "elevee"].includes(p.confiance) ? p.confiance : "faible")),
+    <span class="proj-resume">${indicateurs}${d.raison === "desaccord" ? " " + t("horizon.desaccord") : ""}${
+      d.raison === "variabilite" ? " " + t("horizon.variabilite", { seuil: nombreFR(d.seuil) }) : ""}${
+      d.exces ? " " + t("horizon.exces") : ""} ${t("horizon.pourquoi20ans")}</span>
+    <span class="proj-source">${t("horizon.sourceOM", {
+      source: echapperHTML(proj.meta.source), modeles: echapperHTML(proj.modeles.join(", ")),
+      scenario: echapperHTML(proj.meta.scenario), reference: echapperHTML(proj.meta.periodeReference),
+      horizon: echapperHTML(proj.meta.horizonPeriode), resolution: echapperHTML(proj.meta.resolution),
+      licence: echapperHTML(proj.meta.licence), maj: echapperHTML(proj.meta.miseAJour),
+      confiance: t("horizon.confiance." + d.confiance),
     })}</span>`;
+}
+
+// Récupère la projection une seule fois par session, sans bloquer l'affichage.
+async function chargerProjectionClimat(plante) {
+  if (state.projectionClimat !== null || !state.villeCoords || state._projectionEnCours) return;
+  state._projectionEnCours = true;
+  let resultat = false;
+  try {
+    resultat = (await projectionLocale(state.villeCoords.lat, state.villeCoords.lng)) || false;
+  } catch (e) {
+    journaliserAvertissement("projection_climat_echec", { message: e && e.message });
+  }
+  state._projectionEnCours = false;
+  state.projectionClimat = resultat;
+  // Échec possible pour une raison passagère (limite de requêtes de la source) :
+  // on autorise une nouvelle tentative plus tard plutôt que d'abandonner la session.
+  if (resultat === false) {
+    setTimeout(() => { if (state.projectionClimat === false) state.projectionClimat = null; }, 60000);
+  }
+  // Met à jour la fiche ouverte, si elle attend encore la tendance.
+  const attente = document.querySelector("#proj-attente");
+  if (attente && plante) attente.outerHTML = projectionHTML(plante);
 }
 
 // Bloc « Chez toi » de la fiche : compatibilité aujourd'hui + horizon 5 ans.
 function blocChezToiHTML(plante) {
   const { statut, cle } = statutCulture(plante);
+  if (plante.frileux && state.villeCoords && state.projectionClimat === null) {
+    chargerProjectionClimat(plante);           // non bloquant : la fiche s'affiche d'abord
+  }
   const info = STATUT_INFO[statut] || STATUT_INFO.possible;
   return `
       <div class="bloc bloc-chez-toi">
@@ -2453,7 +2506,7 @@ function blocChezToiHTML(plante) {
         <div class="fiche">
           <span class="k">${t("statut.aujourdhui")}</span>
           <span class="v">${info.emoji} ${t("statut." + statut)}</span>
-          <span class="k">${t("statut.horizon")}</span>
+          <span class="k">${t("statut.horizon2")}</span>
           <span class="v proj-valeur">${projectionHTML(plante)}</span>
         </div>
         ${cle ? `<p class="statut-message">${t(cle)}</p>` : ""}
