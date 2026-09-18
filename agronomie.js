@@ -30,7 +30,16 @@
      cycle.degresJours10Min           degrés-jours base 10 jusqu'à récolte
      chaleur.seuilStressThermique     °C au-delà desquels la culture décroche
      froidHivernal.heuresFroidMin     heures sous 7,2 °C pour lever la dormance
-     eau.sensibiliteDeficit           1 faible, 2 moyenne, 3 forte
+     eau.pFAO                         fraction d'épuisement p (FAO-56 table 22).
+                                      Le moteur en déduit la sensibilité selon
+                                      une lecture uniforme ; on ne code jamais
+                                      un niveau 1-3 à la main.
+     eau.kyFAO                        facteur Ky (FAO-56 table 24). Cette table
+                                      ne couvre que 23 cultures : son absence
+                                      est la norme, pas une lacune.
+     eau.sensibiliteDocumentee        constat qualitatif sourcé, quand aucune
+                                      valeur FAO n'existe. Affiché, jamais
+                                      transformé en chiffre.
 
    Cultures pilotes : le moteur est validé sur cinq cultures aux contraintes
    volontairement différentes (une gélive à cycle long, une à nouaison
@@ -68,10 +77,10 @@ const PROFILS_AGROCLIMATIQUES = {
         note: "En dessous de 25 °C le jour et 17 °C la nuit, l'initiation des racines de réserve décroche — c'est le facteur qui limite réellement la patate douce en climat tempéré, bien plus que le gel. Aucune source ne dit COMBIEN de jours au-dessus de ce seuil sont nécessaires : le moteur affiche donc la mesure locale sans en tirer de verdict, et s'interdit de classer la culture « éprouvée »." },
     },
     eau: {
-      sensibiliteDeficit: { valeur: 1, unite: "1 faible – 3 forte", confiance: "moyenne",
-        source: "FAO Irrigation and Drainage Paper 56, table 22 (fraction d'épuisement p = 0,65)",
-        url: "https://www.fao.org/4/x0490e/x0490e0e.htm", annee: 1998,
-        note: "p = 0,65 : la culture tolère un épuisement important de la réserve utile avant de souffrir — nettement plus que la pomme de terre (p = 0,35). Enracinement 1,0 à 1,5 m." },
+      pFAO: { valeur: 0.65, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998,
+        note: "La culture tolère un épuisement important de la réserve utile avant de souffrir — nettement plus que la pomme de terre (p = 0,35). Enracinement 1,0 à 1,5 m. Aucun Ky : la table 24 de la FAO ne couvre que 23 cultures et pas celle-ci." },
     },
   },
 
@@ -94,10 +103,13 @@ const PROFILS_AGROCLIMATIQUES = {
         note: "Au-delà de 29,4 °C le jour, le pollen devient collant et non viable. Retenu parce que c'est le seuil le plus bas et le plus prudent ; d'autres sources donnent 32,2 °C (échec du développement du fruit, UGA B1312) ou 35-38 °C (atteinte de la microsporogenèse) — ces valeurs ne décrivent pas le même processus et ne doivent pas être empilées." },
     },
     eau: {
-      sensibiliteDeficit: { valeur: 3, unite: "1 faible – 3 forte", confiance: "haute",
-        source: "FAO Irrigation and Drainage Paper 56, tables 22 et 24 (p = 0,40 ; Ky saisonnier = 1,05)",
-        url: "https://www.fao.org/4/x0490e/x0490e0e.htm", annee: 1998,
-        note: "Ky supérieur à 1 : la perte de rendement dépasse proportionnellement le déficit d'eau. Stades critiques : reprise après repiquage, floraison, formation du rendement — un excès d'eau à la floraison nuit aussi." },
+      pFAO: { valeur: 0.40, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998,
+        note: "Stades critiques : reprise après repiquage, floraison, formation du rendement. Un excès d'eau à la floraison nuit aussi." },
+      kyFAO: { valeur: 1.05, unite: "facteur de réponse du rendement à l'eau", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 24", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Supérieur à 1 : la perte de rendement dépasse proportionnellement le déficit d'eau." },
     },
   },
 
@@ -122,10 +134,13 @@ const PROFILS_AGROCLIMATIQUES = {
         note: "La croissance du tubercule est fortement inhibée au-delà de 30 °C (et en dessous de 10 °C). L'initiation demande en outre des nuits sous 15 °C — seuil non exploité par le moteur faute d'indicateur nocturne." },
     },
     eau: {
-      sensibiliteDeficit: { valeur: 3, unite: "1 faible – 3 forte", confiance: "haute",
-        source: "FAO Irrigation and Drainage Paper 56, tables 22 et 24 (p = 0,35 ; Ky saisonnier = 1,1)",
-        url: "https://www.fao.org/4/x0490e/x0490e0e.htm", annee: 1998,
-        note: "Enracinement superficiel (0,4 à 0,6 m, dont 70 % de l'absorption dans les 30 premiers centimètres) : peu de réserve, donc sensibilité forte. Ne pas dépasser 30 à 50 % d'épuisement de la réserve utile." },
+      pFAO: { valeur: 0.35, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998,
+        note: "Enracinement superficiel (0,4 à 0,6 m, dont 70 % de l'absorption dans les 30 premiers centimètres) : peu de réserve, donc sensibilité forte." },
+      kyFAO: { valeur: 1.1, unite: "facteur de réponse du rendement à l'eau", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 24", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998 },
     },
   },
 
@@ -167,10 +182,13 @@ const PROFILS_AGROCLIMATIQUES = {
         note: "Température tuant la moitié des tiges au maximum d'endurcissement, mi-janvier : environ -24 °C pour 'Narve Viking' et -27 °C pour 'Titania' ; on retient la plus prudente. Attention, cette résistance est saisonnière : elle tombe à -5/-6 °C fin mai, et les bourgeons floraux ne se ré-endurcissent quasiment pas après un redoux." },
     },
     eau: {
-      sensibiliteDeficit: { valeur: 3, unite: "1 faible – 3 forte", confiance: "moyenne",
+      // Aucune valeur FAO pour Ribes nigrum : la table 22 ne le couvre pas. On
+      // conserve donc le constat documenté, affiché mais non transformé en
+      // niveau de sensibilité chiffré — ce serait fabriquer un p qui n'existe pas.
+      sensibiliteDocumentee: { texte: "forte, sans valeur chiffrée disponible", confiance: "moyenne",
         source: "Rolbiecki et al., Acta Horticulturae 585:649-652 (2002) ; Scientia Horticulturae (2014), irrigation déficitaire à l'initiation florale",
         url: "https://doi.org/10.17660/ActaHortic.2002.585.107", annee: 2002,
-        note: "Sur sol sableux, la production est jugée impossible sans irrigation. Un déficit de quelques jours seulement au stade d'initiation florale réduit le nombre de grappes et de fleurs de l'année suivante. Aucun besoin hydrique annuel chiffré n'a été trouvé pour l'espèce." },
+        note: "Sur sol sableux, la production est jugée impossible sans irrigation. Un déficit de quelques jours au stade d'initiation florale réduit le nombre de grappes de l'année suivante. Ni p FAO, ni Ky, ni besoin annuel chiffré n'existent pour cette espèce." },
     },
   },
 };

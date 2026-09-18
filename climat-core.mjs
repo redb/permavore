@@ -469,6 +469,15 @@ export const HEURISTIQUES_MOTEUR = {
   margeChaleurRelative: 0.25,      // besoin de chaleur quantifié : 25 %
   observationsPourConclure: 3,     // nombre d'observations concordantes exigé
   partPourConcordance: 0.75,       // part d'observations allant dans le même sens
+  /*
+     Lecture de la fraction d'épuisement p de la FAO-56 (table 22) en niveau de
+     sensibilité. p est la part de la réserve utile qu'une culture supporte de
+     perdre avant de souffrir : plus p est bas, plus elle est sensible. Le
+     découpage en trois niveaux est une lecture UNIFORME du moteur, identique
+     pour toutes les cultures — ce n'est pas une donnée agronomique.
+  */
+  pSensibiliteForte: 0.35,         // p ≤ 0,35 → sensibilité forte
+  pSensibiliteMoyenne: 0.55,       // p ≤ 0,55 → moyenne ; au-delà → faible
   origine: "heuristique du moteur Permavore, non sourcée, remplaçable",
 };
 
@@ -612,14 +621,18 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   // --- eau : une réserve, jamais un verdict — presque tout se corrige en arrosant
   // Aucune source ne dit à partir de quel déficit en millimètres une culture
   // sensible décroche — et de toute façon presque tout se corrige en arrosant.
-  // On affiche donc la sensibilité documentée et la mesure locale, sans verdict.
-  if (Number.isFinite(profilLieu.deficitHydriqueSaisonChaude)
-      && valeurUtilisable(c.eau?.sensibiliteDeficit)) {
+  // On affiche donc la sensibilité déduite de la FAO et la mesure locale, sans
+  // verdict. La table Ky de la FAO ne couvre pas toutes les cultures : quand
+  // elle manque, elle manque, et p suffit à situer la sensibilité.
+  const sourceEau = valeurUtilisable(c.eau?.pFAO) ? c.eau.pFAO : null;
+  if (Number.isFinite(profilLieu.deficitHydriqueSaisonChaude) && sourceEau) {
     dimensions.eau = {
       etat: INCONNU, quantifiable: false,
-      sensibilite: c.eau.sensibiliteDeficit.valeur,
+      sensibilite: sensibiliteDepuisFAO(sourceEau.valeur, c.eau?.kyFAO?.valeur),
+      p: sourceEau.valeur, ky: valeurUtilisable(c.eau?.kyFAO) ? c.eau.kyFAO.valeur : null,
       lieu: profilLieu.deficitHydriqueSaisonChaude, unite: "mm sur 90 jours",
-      bloquant: false, source: c.eau.sensibiliteDeficit, axe: "cycleAnnuel",
+      bloquant: false, source: sourceEau, sourceKy: c.eau?.kyFAO || null,
+      axe: "cycleAnnuel",
     };
   }
 
@@ -746,6 +759,21 @@ export function synthesePreuves(preuves) {
       fort: !!p.fort, confiance: p.confiance, note: p.note, url: p.url || null,
     })),
   };
+}
+
+/**
+ * Sensibilité au déficit hydrique, lue depuis les valeurs FAO-56 : la fraction
+ * d'épuisement p (table 22) et, quand elle existe, le facteur Ky (table 24).
+ * Un Ky supérieur à 1 signifie que la perte de rendement dépasse le déficit
+ * d'eau : il relève la sensibilité d'un cran. La table 24 ne couvrant que 23
+ * cultures, son absence est la norme, pas une lacune.
+ */
+export function sensibiliteDepuisFAO(p, ky) {
+  if (!Number.isFinite(p)) return null;
+  let niveau = p <= HEURISTIQUES_MOTEUR.pSensibiliteForte ? 3
+    : p <= HEURISTIQUES_MOTEUR.pSensibiliteMoyenne ? 2 : 1;
+  if (Number.isFinite(ky) && ky > 1) niveau = Math.min(3, niveau + 1);
+  return niveau;
 }
 
 /** Compte les jours au-dessus d'un seuil, au seuil mesuré le plus proche. */
