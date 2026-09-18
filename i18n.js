@@ -516,6 +516,9 @@ const I18N = {
   "lune.bandeau.title": { fr: "Voir le calendrier lunaire", en: "View the lunar calendar" },
 
   "plan.titre": { fr: "Mon plan de jardin", en: "My garden plan" },
+  "plan.taille.actuelle": { fr: "📐 {largeur} × {longueur} m", en: "📐 {largeur} × {longueur} m" },
+  "plan.surfacePlantee": { fr: "{surface} plantés", en: "{surface} planted" },
+  "plan.echelle": { fr: "Taille de ton jardin — touche pour l'ajuster", en: "Your garden's size — tap to adjust" },
   "plan.taille.btn": { fr: "📐 Taille du jardin", en: "📐 Garden size" },
   "plan.aide": { fr: "Dessine une planche en glissant le doigt, puis valide avec ✓ (ou annule avec ✕). Un tap simple propose une planche d'1 m². Clique une planche pour la cultiver.",
     en: "Draw a bed by dragging, then confirm with ✓ (or cancel with ✕). A simple tap proposes a 1 m² bed. Click a bed to plant something in it." },

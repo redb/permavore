@@ -68,6 +68,33 @@ function sauverJardin() {
 }
 
 /**
+ * Dimensions de départ déduites de la surface que le jardinier a déjà indiquée.
+ *
+ * Auparavant le plan s'ouvrait toujours sur 10 × 8 m, une taille qui ne venait
+ * de nulle part : on voyait un rectangle presque carré sans savoir pourquoi.
+ * Or la surface cultivable est connue dès l'écran d'entrée. On en déduit donc
+ * un rectangle de même aire, un peu plus large que profond — la forme d'un
+ * potager qu'on travaille depuis une allée — arrondi au pas de la grille.
+ *
+ * Le jardinier reste libre de le changer : ce n'est qu'un point de départ qui
+ * lui ressemble, pas une contrainte.
+ */
+function dimensionsDepuisSurface(surfaceM2) {
+  if (!Number.isFinite(surfaceM2) || surfaceM2 <= 0) return null;
+  const surface = Math.min(surfaceM2, GRILLE_MAX * MAILLE_M * GRILLE_MAX * MAILLE_M);
+  const RAPPORT = 1.5;                      // largeur / profondeur
+  const profondeur = Math.sqrt(surface / RAPPORT);
+  const enCases = (m) => Math.max(GRILLE_MIN, Math.min(GRILLE_MAX, Math.round(m / MAILLE_M)));
+  return { cols: enCases(profondeur * RAPPORT), lignes: enCases(profondeur) };
+}
+
+/** Le plan est-il encore à ses dimensions par défaut, sans aucune planche ? */
+function planVierge() {
+  return jardin.planches.length === 0
+    && jardin.cols === GRILLE_COLS_DEFAUT && jardin.lignes === GRILLE_LIGNES_DEFAUT;
+}
+
+/**
  * Change la taille de la grille (en cases de 0,5 m). Refuse si une planche
  * existante déborderait des nouvelles limites.
  * @returns {{ok:true}|{ok:false, motif:string}}

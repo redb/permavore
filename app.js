@@ -2212,7 +2212,8 @@ function traduireStatique() {
   attr("#ville", "placeholder", t("champ.ville.placeholder"));
   attr("#recherche", "placeholder", t("recherche.placeholder"));
   attr("#plan-taille-jardin-btn", "data-noop", "");
-  const btnTaille = $("#btn-taille-jardin"); if (btnTaille) btnTaille.textContent = t("plan.taille.btn");
+  majBoutonTaille();
+  set("#plan-echelle", t("plan.echelle"));
   majMonPotager();
 }
 
@@ -3175,7 +3176,26 @@ function ouvrirMessage(titre, texte) {
    Plan du jardin : dessin des planches, culture, récolte et rotation
    ========================================================================= */
 
-const TAILLE_CASE_PX = 26;          // rendu d'une maille de 0,5 m
+const TAILLE_CASE_PX_MAX = 26;      // rendu confortable d'une maille de 0,5 m
+const TAILLE_CASE_PX_MIN = 13;      // en dessous, on ne vise plus rien au doigt
+let TAILLE_CASE_PX = TAILLE_CASE_PX_MAX;
+
+/*
+   Taille d'une case à l'écran. Le plan doit tenir dans la largeur disponible :
+   sur téléphone, une grille de huit mètres de large débordait et se parcourait
+   en glissant, si bien qu'on ne voyait jamais son jardin en entier. On réduit
+   donc la maille jusqu'à ce que le plan tienne — sans descendre sous le seuil
+   où l'on ne peut plus viser une case au doigt, auquel cas le défilement
+   reprend ses droits.
+*/
+function ajusterTailleCase() {
+  const wrap = document.querySelector(".plan-wrap");
+  if (!wrap) return TAILLE_CASE_PX_MAX;
+  const dispo = wrap.clientWidth - 24;          // moins le rembourrage
+  if (dispo <= 0 || !jardin.cols) return TAILLE_CASE_PX_MAX;
+  const ideale = Math.floor(dispo / jardin.cols);
+  return Math.max(TAILLE_CASE_PX_MIN, Math.min(TAILLE_CASE_PX_MAX, ideale));
+}
 
 function fmtM2(m2) {
   return `${m2.toLocaleString(localeCourante(), { maximumFractionDigits: 2 })} m²`;
@@ -3193,6 +3213,13 @@ function basculerPlan() {
 function rendrePlan() {
   const g = $("#plan-grille");
   if (!g) return;
+  // Premier affichage d'un plan vierge : on part de la surface déjà indiquée
+  // plutôt que d'une taille arbitraire.
+  if (planVierge() && Number.isFinite(state.surface) && state.surface > 0) {
+    const d = dimensionsDepuisSurface(state.surface);
+    if (d) redimensionnerJardin(d.cols, d.lignes);
+  }
+  TAILLE_CASE_PX = ajusterTailleCase();
   g.style.setProperty("--maille", TAILLE_CASE_PX + "px");
   g.style.width = jardin.cols * TAILLE_CASE_PX + "px";
   g.style.height = jardin.lignes * TAILLE_CASE_PX + "px";
@@ -3201,7 +3228,10 @@ function rendrePlan() {
   jardin.planches.forEach(p => g.appendChild(elementPlanche(p)));
 
   const surf = surfaceTotale();
-  $("#plan-surface").textContent = fmtM2(surf);
+  // La pastille dit ce qui est PLANTÉ ; le bouton dit la taille du jardin.
+  // Les confondre était la source du malentendu.
+  $("#plan-surface").textContent = t("plan.surfacePlantee", { surface: fmtM2(surf) });
+  majBoutonTaille();
   $("#plan-legende").innerHTML = `
     <span><i class="lg-vide"></i> ${t("plan.legende.libre")}</span>
     <span><i class="lg-cult"></i> ${t("plan.legende.culture")}</span>
@@ -3248,6 +3278,17 @@ function recolteCommencee(planche, plante) {
 }
 
 /* ---------- Modale : changer la taille du jardin (largeur × longueur) ---------- */
+/** Le bouton affiche les dimensions courantes : c'est lui qui les annonce. */
+function majBoutonTaille() {
+  const b = $("#btn-taille-jardin");
+  if (!b) return;
+  b.textContent = t("plan.taille.actuelle", {
+    largeur: fmtSurface(jardin.cols * MAILLE_M),
+    longueur: fmtSurface(jardin.lignes * MAILLE_M),
+  });
+  b.title = t("plan.taille.btn");
+}
+
 function ouvrirModaleTailleJardin() {
   const modale = $("#modale");
   const largeurActuelle = jardin.cols * MAILLE_M;

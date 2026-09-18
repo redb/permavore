@@ -195,12 +195,15 @@
 
     <section class="section" id="section-plan" hidden>
       <div class="section-titre">
-        <h2 id="plan-titre">Mon plan de jardin</h2><span class="pastille" id="plan-surface">0 m²</span>
-        <button type="button" class="btn secondaire" id="btn-taille-jardin" style="margin-left:auto">📐 Taille du jardin</button>
+        <h2 id="plan-titre">Mon plan de jardin</h2><span class="pastille" id="plan-surface">0 m² plantés</span>
       </div>
       <p class="section-sous" id="plan-aide">
         Dessine une planche en glissant le doigt, puis valide avec ✓ (ou annule avec ✕).
         Un tap simple propose une planche d'1 m². Clique une planche pour la cultiver.</p>
+      <div class="plan-barre">
+        <button type="button" class="btn secondaire" id="btn-taille-jardin">📐 10 × 8 m</button>
+        <span class="plan-echelle" id="plan-echelle">Taille de ton jardin — touche pour l'ajuster</span>
+      </div>
       <div class="plan-wrap">
         <div class="plan-grille" id="plan-grille"></div>
       </div>

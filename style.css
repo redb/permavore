@@ -1016,3 +1016,12 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
   margin:0 0 .8rem;padding:.6rem .8rem;border-radius:10px;
   background:rgba(63,107,70,.10);border:1px solid rgba(63,107,70,.25);font-size:.92rem}
 .lune-rappel span{flex:1 1 12rem}
+
+/* Barre du plan : la taille du jardin se règle au-dessus de la grille, là où
+   on la regarde — et le bouton annonce les dimensions au lieu de les cacher. */
+.plan-barre{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:.4rem 0 .5rem}
+.plan-echelle{font-size:.85rem;opacity:.7}
+@media (max-width:480px){
+  .plan-barre{gap:.4rem}
+  .plan-echelle{flex:1 1 100%}
+}
