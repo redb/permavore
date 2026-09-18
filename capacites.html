@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Permavore — ce que permet ce navigateur</title>
+<style>
+  body{font:16px/1.5 system-ui,-apple-system,sans-serif;margin:0;padding:1.2rem;background:#fffdf8;color:#2e2a24}
+  h1{font-size:1.15rem;margin:0 0 .2rem}
+  p.sous{margin:0 0 1rem;opacity:.7;font-size:.9rem}
+  table{border-collapse:collapse;width:100%;max-width:620px;font-size:1.05rem}
+  td{padding:.35rem .5rem;border-bottom:1px solid rgba(0,0,0,.1)}
+  td.v{font-weight:700;text-align:right;white-space:nowrap}
+  .oui{color:#1f7a34} .non{color:#a4452c}
+  #verdict{margin:1rem 0;padding:.7rem;border-radius:10px;font-weight:700;max-width:620px}
+  .ok{background:#e4f3e6;color:#1f7a34} .ko{background:#fbeae5;color:#a4452c}
+  button{font:inherit;padding:.6rem 1rem;border-radius:10px;border:1px solid #3f6b46;
+    background:#3f6b46;color:#fff;cursor:pointer}
+  #essai{margin-top:.8rem;font-weight:700;max-width:620px}
+  #nav{font-size:.8rem;opacity:.6;margin-top:1rem;word-break:break-all;max-width:620px}
+</style>
+</head>
+<body>
+<h1>Permavore — ce que permet ce navigateur</h1>
+<p class="sous">Page de diagnostic. Elle n'écrit rien tant que tu ne cliques pas.</p>
+<table id="t"></table>
+<div id="verdict"></div>
+<button id="essayer">Essayer d'enregistrer un fichier</button>
+<p id="essai"></p>
+<p id="nav"></p>
+<script type="module">
+import { capacites, nomPropose } from "./fichier-secours.js";
+const c = capacites();
+const lignes = [
+  ["Choisir un fichier (showSaveFilePicker)", c.choisirFichier],
+  ["Réécrire ce fichier (createWritable)", c.reecrire],
+  ["Vérifier le droit d'écriture (queryPermission)", c.permissions],
+  ["Partage natif de fichiers (navigator.share)", c.partageNatif],
+  ["Téléchargement classique", c.telechargement],
+];
+document.getElementById("t").innerHTML = lignes.map(([n, v]) =>
+  `<tr><td>${n}</td><td class="v ${v ? "oui" : "non"}">${v ? "OUI" : "non"}</td></tr>`).join("");
+const v = document.getElementById("verdict");
+v.className = c.autosauvegarde ? "ok" : "ko";
+v.textContent = c.autosauvegarde
+  ? "AUTOSAUVEGARDE FICHIER : possible"
+  : "AUTOSAUVEGARDE FICHIER : impossible — Permavore proposera le partage ou le téléchargement";
+document.getElementById("nav").textContent = navigator.userAgent;
+
+
+// Un bouton, parce que ces API exigent un vrai geste de l'utilisateur — et
+// parce que l'existence d'une fonction ne prouve pas qu'elle fonctionne ici.
+document.getElementById("essayer").addEventListener("click", async () => {
+  const sortie = document.getElementById("essai");
+  if (!c.choisirFichier) {
+    sortie.textContent = "RESULTAT: showSaveFilePicker absent — repli téléchargement";
+    return;
+  }
+  try {
+    const p = await window.showSaveFilePicker({
+      suggestedName: nomPropose("test"),
+      types: [{ description: "Sauvegarde Permavore", accept: { "application/json": [".json"] } }],
+    });
+    const f = await p.createWritable();
+    await f.write(JSON.stringify({ format: "permavore", essai: true, quand: new Date().toISOString() }, null, 2));
+    await f.close();
+    const droit = p.queryPermission ? await p.queryPermission({ mode: "readwrite" }) : "inconnu";
+    sortie.textContent = `RESULTAT: ECRITURE REUSSIE dans ${p.name} — droit persistant: ${droit}`;
+  } catch (e) {
+    sortie.textContent = `RESULTAT: ECHEC ${e && e.name} — ${String(e && e.message).slice(0, 80)}`;
+  }
+});
+</script>
+</body>
+</html>
