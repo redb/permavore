@@ -40,6 +40,14 @@
      eau.sensibiliteDocumentee        constat qualitatif sourcé, quand aucune
                                       valeur FAO n'existe. Affiché, jamais
                                       transformé en chiffre.
+     photoperiode.heuresMin           longueur de jour minimale pour déclencher
+                                      la production. Contrainte géographique
+                                      dure : sous l'équateur le jour ne dépasse
+                                      jamais ~12 h.
+     germination.tempMinSol           température minimale de germination.
+                                      Documentée, pas encore exploitée par le
+                                      moteur — à ne pas confondre avec un seuil
+                                      de croissance.
 
    Cultures pilotes : le moteur est validé sur cinq cultures aux contraintes
    volontairement différentes (une gélive à cycle long, une à nouaison
@@ -81,6 +89,183 @@ const PROFILS_AGROCLIMATIQUES = {
         source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
         annee: 1998,
         note: "La culture tolère un épuisement important de la réserve utile avant de souffrir — nettement plus que la pomme de terre (p = 0,35). Enracinement 1,0 à 1,5 m. Aucun Ky : la table 24 de la FAO ne couvre que 23 cultures et pas celle-ci." },
+    },
+  },
+
+
+  /* ======================= LOT 1 ======================= */
+
+  /* --- Courgette ----------------------------------------------------------
+     Introuvable : Ky (la table 24 de la FAO ne compte que 23 cultures, et la
+     courgette n'y est pas), seuil physiologique d'avortement floral, et
+     température de dégât par le gel (qualification « tender » seulement). */
+  "courgette": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 55, unite: "jours", confiance: "moyenne",
+        source: "Clemson Cooperative Extension (HGIC), Summer Squash",
+        url: "https://hgic.clemson.edu/factsheet/summer-squash/", annee: 2023,
+        note: "Première récolte environ 55 jours après plantation. La FAO donne 90 à 100 jours, mais pour le cycle COMPLET incluant toute la période de récolte : les deux ne mesurent pas la même chose. On retient la durée la plus courte documentée jusqu'à la première récolte, puisque c'est elle qui dit si le cycle tient dans la saison." },
+    },
+    chaleur: {
+      seuilStressThermique: { valeur: 32.2, unite: "°C", confiance: "moyenne",
+        source: "University of Minnesota Extension, « Vegetables not yielding well? Blame the heat »",
+        url: "https://blog-fruit-vegetable-ipm.extension.umn.edu/2021/07/vegetables-not-yielding-well-blame-heat.html",
+        annee: 2021,
+        note: "Au-delà de 32 °C le jour (et 21 °C la nuit), la floraison bascule vers les fleurs mâles : beaucoup de fleurs, peu de fruits. Au-delà de ce même seuil l'activité des pollinisateurs chute aussi. C'est un défaut de RENDEMENT, pas un dégât sur la plante." },
+    },
+    eau: {
+      pFAO: { valeur: 0.50, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Enracinement 0,6 à 1,0 m. Aucun Ky : la courgette est absente de la table 24." },
+    },
+    germination: {
+      tempMinSol: { valeur: 15.6, unite: "°C (sol)", confiance: "haute",
+        source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
+        url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
+        annee: 2013, note: "Confirmé indépendamment par OSU Horticulture. Optimum 21 à 35 °C. Seuil de germination, à ne pas confondre avec un seuil de croissance." },
+    },
+  },
+
+  /* --- Carotte ------------------------------------------------------------
+     Introuvable : tout seuil de chaleur CHIFFRÉ. Les sources décrivent l'effet
+     ("longues périodes de chaleur : saveur forte, racines courtes et épaisses")
+     sans jamais donner de température. On ne la fabrique pas. Ky absent. */
+  "carotte": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 90, unite: "jours", confiance: "haute",
+        source: "University of Georgia Extension, Bulletin 1175",
+        url: "https://fieldreport.caes.uga.edu/publications/B1175/commercial-production-and-management-of-carrots/",
+        annee: 2012,
+        note: "Trois à cinq mois du semis à la récolte : on retient trois mois, la durée la plus courte documentée. La FAO donne 150 jours en Méditerranée, cohérent avec la borne haute." },
+    },
+    eau: {
+      pFAO: { valeur: 0.35, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Enracinement 0,5 à 1,0 m. Aucun Ky : la carotte est absente de la table 24." },
+      sensibiliteDocumentee: { texte: "la chaleur prolongée dégrade la RACINE avant la plante", confiance: "haute",
+        source: "University of Georgia Extension, Bulletin 1175",
+        url: "https://fieldreport.caes.uga.edu/publications/B1175/commercial-production-and-management-of-carrots/",
+        annee: 2012,
+        note: "Optimum 15,6 à 21,1 °C. Au-dessus : saveur terpénoïde forte, amertume, racines courtes et épaisses. La source ne donne AUCUNE température de seuil — elle n'est donc pas inscrite ici." },
+    },
+    germination: {
+      tempMinSol: { valeur: 4.4, unite: "°C (sol)", confiance: "haute",
+        source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
+        url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
+        annee: 2013, note: "Clemson donne une plage optimale plus étroite (12,8 à 23,9 °C) : désaccord signalé, non moyenné." },
+    },
+  },
+
+  /* --- Laitue -------------------------------------------------------------
+     Introuvable : seuil de montaison chiffré à l'échelle de l'ESPÈCE. Les
+     chiffres disponibles sont soit un haut d'optimum (Cornell), soit propres au
+     type Bibb (Clemson, 23,9 °C), soit obtenus en enceinte sur un cultivar
+     réputé montant (33/25 °C). Aucun ne vaut pour Lactuca sativa en général :
+     le champ reste vide. Ky absent. */
+  "laitue": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 55, unite: "jours", confiance: "moyenne",
+        source: "Clemson Cooperative Extension (HGIC), Lettuce",
+        url: "https://hgic.clemson.edu/factsheet/lettuce/", annee: 2023,
+        note: "Laitue pommée dès 55 jours selon la variété ; laitue à couper environ 75 jours. On retient la plus courte durée documentée. La FAO donne 75 à 140 jours selon la date de plantation, sans préciser si le décompte part du semis ou du repiquage — imprécision qui interdit de s'en servir seule." },
+    },
+    eau: {
+      pFAO: { valeur: 0.30, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Enracinement 0,3 à 0,5 m, le plus superficiel du lot : très peu de réserve, donc arrosages courts et fréquents. Aucun Ky : la laitue est absente de la table 24." },
+      sensibiliteDocumentee: { texte: "monte à graine et devient amère à la chaleur, sans seuil chiffré pour l'espèce", confiance: "haute",
+        source: "Clemson Cooperative Extension (HGIC), Lettuce ; Cornell Cooperative Extension",
+        url: "https://hgic.clemson.edu/factsheet/lettuce/", annee: 2023,
+        note: "Croissance optimale entre 12,8 et 18,3 °C. Le type Bibb devient amer au-delà de 23,9 °C, mais cette valeur est propre à ce type et n'est pas généralisée ici." },
+    },
+    germination: {
+      tempMinSol: { valeur: 1.7, unite: "°C (sol)", confiance: "haute",
+        source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
+        url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
+        annee: 2013, note: "La graine germe au froid mais entre en thermodormance vers 32 à 35 °C selon les sources — désaccord signalé, non moyenné." },
+    },
+  },
+
+  /* --- Haricot ------------------------------------------------------------
+     Désaccord notable et non résolu : l'extension grand public pointe la
+     température DIURNE (32,2 °C), la littérature récente la température
+     NOCTURNE (au-delà de 20 à 21 °C sur les boutons floraux). Le moteur ne
+     dispose que des maxima diurnes : on retient le seuil diurne publié à
+     comité de lecture, et on note que la part nocturne n'est pas évaluée. */
+  "haricot": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 55, unite: "jours", confiance: "moyenne",
+        source: "Clemson Cooperative Extension (HGIC), Bush & Pole-Type Snap Beans",
+        url: "https://hgic.clemson.edu/factsheet/bush-pole-type-snap-beans/", annee: null,
+        note: "Première cueillette vers 55 jours. La FAO donne 75 à 90 jours pour le cycle complet, période de récolte comprise : définitions différentes, pas un conflit." },
+    },
+    chaleur: {
+      seuilStressThermique: { valeur: 30, unite: "°C", confiance: "haute",
+        source: "Rose T., Lowe C. et al., Plants (Basel) 12(13):2491",
+        url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC10347029/", annee: 2023,
+        note: "Au-delà de 30 °C le jour, stérilité pollinique et nouaison réduite. La même source ajoute un seuil nocturne de 20 °C, et l'université du Delaware montre que les boutons floraux en formation sont plus sensibles encore que les fleurs ouvertes : cette part nocturne N'EST PAS évaluée par le moteur, qui ne dispose que des maxima diurnes. Clemson donne 32,2 °C — désaccord signalé, non moyenné." },
+    },
+    eau: {
+      pFAO: { valeur: 0.45, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Enracinement 0,5 à 0,7 m. L'exemple 39 du même document utilise 0,40 : incohérence interne de la FAO, signalée et non arbitrée." },
+      kyFAO: { valeur: 1.15, unite: "facteur de réponse du rendement à l'eau", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 24", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Supérieur à 1 : la perte de rendement dépasse proportionnellement le déficit d'eau." },
+    },
+    germination: {
+      tempMinSol: { valeur: 15.6, unite: "°C (sol)", confiance: "haute",
+        source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
+        url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
+        annee: 2013, note: "Confirmé par Clemson : ne pas semer avant 15,6 °C à 10 cm de profondeur." },
+    },
+  },
+
+  /* --- Oignon -------------------------------------------------------------
+     Cas qui a révélé une insuffisance du moteur : la bulbaison de l'oignon ne
+     se déclenche pas sur la température mais sur la LONGUEUR DU JOUR. Sous
+     l'équateur, où le jour ne dépasse jamais environ 12 h, aucune variété à
+     jours longs ne bulbera, quelle que soit la saison. La photopériode est donc
+     devenue une dimension du moteur.
+     Introuvable : tout seuil de stress thermique chiffré affectant la
+     bulbaison. Les sources ne donnent que des optimums — on ne les transforme
+     pas en seuils. */
+  "oignon": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 150, unite: "jours", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 11, ligne « Onion (dry) »",
+        url: "https://www.fao.org/4/x0490e/x0490e0b.htm", annee: 1998,
+        note: "150 à 210 jours du semis à la fin de récolte pour l'oignon de garde ; on retient la borne basse. L'oignon botte se récolte bien plus tôt (70 jours), mais c'est un autre usage." },
+    },
+    photoperiode: {
+      heuresMin: { valeur: 10, unite: "heures de jour", confiance: "haute",
+        source: "NC State Extension, Bulb Onions ; Oregon State University, Types of Onions and Varieties",
+        url: "https://content.ces.ncsu.edu/bulb-onions", annee: null,
+        note: "Seuil le plus bas toutes variétés confondues : en dessous d'environ 10 heures de jour, aucune variété ne bulbe. Ce n'est PAS une garantie que n'importe quelle variété conviendra — voir les groupes ci-dessous." },
+      groupes: [
+        { nom: "jours courts", heures: [10, 12], ou: "basses latitudes" },
+        { nom: "jours intermédiaires", heures: [12, 14], ou: "latitudes moyennes" },
+        { nom: "jours longs", heures: [14, 16], ou: "hautes latitudes" },
+      ],
+    },
+    eau: {
+      pFAO: { valeur: 0.30, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "L'une des plus basses de la table, combinée à un enracinement de 0,3 à 0,6 m : très peu de réserve, donc irrigations fréquentes et légères." },
+      kyFAO: { valeur: 1.1, unite: "facteur de réponse du rendement à l'eau", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 24", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998 },
+    },
+    germination: {
+      tempMinSol: { valeur: 1.7, unite: "°C (sol)", confiance: "haute",
+        source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
+        url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
+        annee: 2013 },
     },
   },
 

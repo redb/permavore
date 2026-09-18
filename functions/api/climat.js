@@ -13,8 +13,8 @@
    le client continue sans projection : jamais de valeur approchée.
 */
 
-import { profilClimatique, classifierKoppen, zoneInterneDepuisKoppen, DEFINITIONS }
-  from "../../climat-core.mjs";
+import { profilClimatique, classifierKoppen, zoneInterneDepuisKoppen, DEFINITIONS,
+  VERSION_MOTEUR_CLIMAT } from "../../climat-core.mjs";
 
 const ARCHIVE = "https://archive-api.open-meteo.com/v1/archive";
 const CLIMAT = "https://climate-api.open-meteo.com/v1/climate";
@@ -89,8 +89,12 @@ export async function onRequestGet({ request }) {
   }
   const la = grille(lat), lo = grille(lng);
 
-  // Clé de cache : la grille, pas les coordonnées exactes de l'utilisateur.
-  const cleCache = new Request(`https://permavore.pages.dev/api/climat?lat=${la}&lng=${lo}`,
+  // Clé de cache : la grille ET la version du moteur. Sans cette seconde
+  // partie, déployer un moteur qui calcule un indicateur de plus continuerait
+  // à servir l'ancien profil pendant trente jours — le cache travaillerait
+  // contre la correction qu'on vient de publier.
+  const cleCache = new Request(
+    `https://permavore.pages.dev/api/climat?v=${VERSION_MOTEUR_CLIMAT}&lat=${la}&lng=${lo}`,
     { method: "GET" });
   const cache = caches.default;
   const enCache = await cache.match(cleCache);
@@ -191,6 +195,7 @@ export async function onRequestGet({ request }) {
       resolution: "environ 10 km",
       licence: "CC BY 4.0 (Open-Meteo)",
       recupere: new Date().toISOString().slice(0, 10),
+      versionMoteur: VERSION_MOTEUR_CLIMAT,
       definitions: DEFINITIONS,
     },
   };

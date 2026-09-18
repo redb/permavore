@@ -27,7 +27,7 @@
    changer que lorsque le CALCUL change — jamais pour une correction de style
    ou de texte, qui ne doit provoquer aucun nouvel appel à la source.
 */
-export const VERSION_MOTEUR_CLIMAT = 2;
+export const VERSION_MOTEUR_CLIMAT = 3;   // v3 : ajout de la longueur du jour
 
 /**
  * Clé de cache d'un profil climatique. Elle décrit exactement ce qui a servi
@@ -88,6 +88,29 @@ export function rayonnementExtraterrestre(latitude, jourAnnee) {
   const raMJ = ((24 * 60) / Math.PI) * 0.082 * dr *
     (omega * Math.sin(phi) * Math.sin(decl) + Math.cos(phi) * Math.cos(decl) * Math.sin(omega));
   return Math.max(0, raMJ * 0.408); // MJ·m⁻²·j⁻¹ → mm/jour
+}
+
+/**
+ * Durée du jour en heures, pour une latitude et un jour de l'année (FAO-56,
+ * éq. 34). Ce n'est pas une sortie de modèle : c'est de l'astronomie, exacte
+ * partout et pour toujours. Elle compte parce que certaines cultures ne
+ * déclenchent pas leur production sur la température mais sur la longueur du
+ * jour — l'oignon en est l'exemple le plus net.
+ */
+export function dureeJour(latitude, jourAnnee) {
+  const phi = (latitude * Math.PI) / 180;
+  const decl = 0.409 * Math.sin((2 * Math.PI * jourAnnee) / 365 - 1.39);
+  const x = -Math.tan(phi) * Math.tan(decl);
+  if (x <= -1) return 24;          // jour continu (été polaire)
+  if (x >= 1) return 0;            // nuit continue (hiver polaire)
+  return (24 / Math.PI) * Math.acos(x);
+}
+
+/** Durée du jour la plus longue de l'année, au solstice d'été local. */
+export function dureeJourMax(latitude) {
+  let maxi = 0;
+  for (let j = 1; j <= 365; j += 1) maxi = Math.max(maxi, dureeJour(latitude, j));
+  return Math.round(maxi * 10) / 10;
 }
 
 /** ET0 de référence par Hargreaves-Samani (FAO-56, éq. 52). */
@@ -308,6 +331,9 @@ export function profilClimatique(serie, latitude) {
       heuresFroid: arrondi(ecartType(colonne("heuresFroid")), 0),
       deficitHydriqueSaisonChaude: arrondi(ecartType(colonne("deficitHydrique")), 0),
     },
+    // Longueur du jour : calcul astronomique exact, pas une donnée modélisée.
+    heuresJourMax: dureeJourMax(latitude),
+    latitude: arrondi(latitude, 2),
     anneesUtilisees: annees.length,
     ancreSaisonFroide: ancre,
     hemisphere: latitude >= 0 ? "nord" : "sud",
@@ -616,6 +642,20 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
           etat: INCONNU, quantifiable: false };
       }
     }
+  }
+
+  // --- photopériode : certaines cultures ne déclenchent pas leur production
+  // sur la chaleur mais sur la longueur du jour. C'est une contrainte
+  // géographique dure : sous l'équateur, le jour ne dépasse jamais ~12 h, et
+  // aucune variété à jours longs n'y bulbera jamais, quelle que soit la saison.
+  if (valeurUtilisable(c.photoperiode?.heuresMin) && Number.isFinite(profilLieu.heuresJourMax)) {
+    const requis = c.photoperiode.heuresMin.valeur;
+    dimensions.photoperiode = {
+      etat: etatDepuisMarges(profilLieu.heuresJourMax, requis, 0.5),
+      lieu: profilLieu.heuresJourMax, requis, unite: "heures de jour",
+      bloquant: true, axe: "cycleAnnuel", source: c.photoperiode.heuresMin,
+      groupes: c.photoperiode.groupes || null,
+    };
   }
 
   // --- eau : une réserve, jamais un verdict — presque tout se corrige en arrosant

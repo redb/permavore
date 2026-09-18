@@ -437,3 +437,50 @@ async function chargerEnvironnements() {
   vm.runInContext(readFileSync(new URL("../environnements.js", import.meta.url), "utf8"), ctx);
   return ctx.window.Environnements;
 }
+
+/* ---------------------------------------------------------------------------
+   Photopériode : certaines cultures se déclenchent sur la longueur du jour,
+   pas sur la chaleur. C'est une contrainte géographique dure.
+   --------------------------------------------------------------------------- */
+
+test("la durée du jour est exacte et dépend de la latitude, pas d'un modèle", async () => {
+  const { dureeJourMax, dureeJour } = await import("../climat-core.mjs");
+  // À l'équateur, le jour ne s'écarte jamais de douze heures.
+  assert.ok(Math.abs(dureeJourMax(0) - 12) < 0.2);
+  // Symétrie des hémisphères : même latitude, même jour le plus long.
+  assert.equal(dureeJourMax(45), dureeJourMax(-45));
+  // Au-delà du cercle polaire, le soleil ne se couche plus.
+  assert.equal(dureeJourMax(69.6), 24);
+  // Et les saisons sont inversées : le 21 juin est court dans le sud.
+  assert.ok(dureeJour(45, 172) > dureeJour(-45, 172));
+});
+
+test("une culture à photopériode est incompatible là où le jour est trop court", () => {
+  const equateur = profilClimatique(serie({ tmoy: 27, amplitude: 2 }), 0.3);
+  const tempere = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+  const joursLongs = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(150, "jours") },
+    photoperiode: { heuresMin: source(14, "heures de jour") },
+  };
+  const sousEquateur = compatibiliteActuelle(joursLongs, equateur);
+  assert.equal(sousEquateur.dimensions.photoperiode.etat, "defavorable");
+  assert.equal(sousEquateur.compatibilite, "incompatible",
+    "aucune saison ne rattrapera un jour qui ne dépasse jamais douze heures");
+
+  const sousTempere = compatibiliteActuelle(joursLongs, tempere);
+  assert.equal(sousTempere.dimensions.photoperiode.etat, "favorable");
+  assert.notEqual(sousTempere.compatibilite, "incompatible");
+});
+
+test("une culture à jours courts reste possible sous l'équateur", () => {
+  const equateur = profilClimatique(serie({ tmoy: 27, amplitude: 2 }), 0.3);
+  const joursCourts = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: source(150, "jours") },
+    photoperiode: { heuresMin: source(10, "heures de jour") },
+  };
+  const r = compatibiliteActuelle(joursCourts, equateur);
+  assert.equal(r.dimensions.photoperiode.etat, "favorable");
+  assert.equal(r.compatibilite, "compatible");
+});
