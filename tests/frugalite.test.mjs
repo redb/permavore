@@ -141,3 +141,35 @@ test("l'attente après échec croît et n'est jamais identique pour tous", () =>
   // Le facteur aléatoire évite que tous les navigateurs réessaient ensemble.
   assert.notEqual(attente(2).min, attente(2).max);
 });
+
+/* ---------------------------------------------------------------------------
+   Non-régression : un changement du moteur susceptible de modifier le profil
+   doit invalider le cache correspondant — celui du navigateur ET celui du bord
+   du réseau. Le second manquait, et servait l'ancien profil trente jours.
+   --------------------------------------------------------------------------- */
+
+test("changer la version du moteur invalide l'entrée du cache au bord du réseau", async () => {
+  const { urlCacheEdge } = await import("../functions/api/climat.js");
+  const v3 = urlCacheEdge(45.9, 5.9, 3);
+  const v4 = urlCacheEdge(45.9, 5.9, 4);
+  assert.notEqual(v3, v4, "un nouveau moteur ne réutilise pas l'ancien profil");
+  assert.equal(urlCacheEdge(45.9, 5.9, 3), v3, "à version égale, la clé est stable");
+  assert.ok(v3.includes("v=3") && v3.includes("lat=45.9") && v3.includes("lng=5.9"));
+});
+
+test("la version du moteur invalide aussi le cache du navigateur", () => {
+  const avec = (version) => cleCacheClimat({ ...base, version });
+  assert.notEqual(avec(3), avec(4));
+  assert.equal(avec(3), avec(3));
+});
+
+test("les deux caches s'invalident ensemble, jamais l'un sans l'autre", async () => {
+  const { urlCacheEdge } = await import("../functions/api/climat.js");
+  // Même maille, deux versions : les deux niveaux doivent changer de clé en
+  // même temps, sinon un profil neuf côté navigateur lirait un profil périmé
+  // côté réseau, ou l'inverse.
+  const edgeChange = urlCacheEdge(45.9, 5.9, 3) !== urlCacheEdge(45.9, 5.9, 4);
+  const localChange = cleCacheClimat({ ...base, version: 3 }) !== cleCacheClimat({ ...base, version: 4 });
+  assert.equal(edgeChange, localChange);
+  assert.equal(edgeChange, true);
+});

@@ -542,6 +542,12 @@ const etatDepuisMarges = (valeurLieu, requis, margeConfort) => {
 
 const CONFORTABLE = "favorable", LIMITE = "limite", HORS = "defavorable", INCONNU = "inconnu";
 
+// Façons d'installer une culture. La durée du cycle s'entend TOUJOURS pour
+// l'une d'elles : elle n'est pas une propriété abstraite de l'espèce.
+export const MODES_IMPLANTATION = [
+  "semis_direct", "semis_sous_abri_repiquage", "plant", "bulbille", "autre",
+];
+
 export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   const dimensions = {};
   const vide = {
@@ -562,12 +568,22 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   const saisonDerivee = sourceSaison === c.cycle?.joursMaturite && !!sourceSaison;
   if (sourceSaison && Number.isFinite(profilLieu.saisonSansGel)) {
     const requis = sourceSaison.valeur;
+    /*
+       Une durée de cycle n'est pas une propriété abstraite de l'espèce : elle
+       dépend de la façon dont on l'installe. Cent cinquante jours pour un
+       oignon semé en place ne veulent pas dire qu'un oignon planté en bulbilles
+       réclame autant de saison. On transporte donc le mode d'implantation avec
+       la durée, et on signale quand d'autres modes existent sans être chiffrés.
+    */
     dimensions.cycle = {
       etat: profilLieu.sansGelToutelAnnee ? CONFORTABLE
         : etatDepuisMarges(profilLieu.saisonSansGel, requis, Math.max(20, requis * HEURISTIQUES_MOTEUR.margeDureeRelative)),
       lieu: profilLieu.saisonSansGel, requis, unite: "jours",
       bloquant: true, source: sourceSaison, derive: saisonDerivee,
       axe: "cycleAnnuel",
+      modeImplantation: sourceSaison.modeImplantation || null,
+      // D'autres façons d'installer la culture existent-elles, sans durée connue ?
+      autresModes: Array.isArray(c.cycle?.autresModes) ? c.cycle.autresModes : null,
     };
   }
 
@@ -648,13 +664,24 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
   // sur la chaleur mais sur la longueur du jour. C'est une contrainte
   // géographique dure : sous l'équateur, le jour ne dépasse jamais ~12 h, et
   // aucune variété à jours longs n'y bulbera jamais, quelle que soit la saison.
-  if (valeurUtilisable(c.photoperiode?.heuresMin) && Number.isFinite(profilLieu.heuresJourMax)) {
-    const requis = c.photoperiode.heuresMin.valeur;
+  if (Array.isArray(c.photoperiode?.groupes) && c.photoperiode.groupes.length
+      && Number.isFinite(profilLieu.heuresJourMax)) {
+    const jour = profilLieu.heuresJourMax;
+    // Un groupe variétal convient si la longueur du jour atteint son seuil.
+    const possibles = c.photoperiode.groupes.filter(g => jour >= g.heures[0]);
+    // Celui dont la plage encadre la longueur du jour est le plus indiqué.
+    const indique = possibles.find(g => jour <= g.heures[1]) || possibles[possibles.length - 1] || null;
     dimensions.photoperiode = {
-      etat: etatDepuisMarges(profilLieu.heuresJourMax, requis, 0.5),
-      lieu: profilLieu.heuresJourMax, requis, unite: "heures de jour",
-      bloquant: true, axe: "cycleAnnuel", source: c.photoperiode.heuresMin,
-      groupes: c.photoperiode.groupes || null,
+      lieu: jour, unite: "heures de jour", bloquant: true, axe: "cycleAnnuel",
+      source: c.photoperiode.source || null,
+      groupesPossibles: possibles.map(g => g.nom),
+      groupeIndique: indique ? indique.nom : null,
+      // La latitude donne exactement la longueur du jour. Elle ne donne PAS le
+      // besoin de la variété qu'on a en main. Tant qu'on ne sait pas laquelle
+      // c'est, on ne déclare pas l'espèce « favorable » ici : on dit seulement
+      // qu'il existe des variétés adaptées — ou qu'il n'y en a aucune.
+      dependVariete: true,
+      etat: possibles.length ? INCONNU : HORS,
     };
   }
 

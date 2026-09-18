@@ -41,6 +41,16 @@ export function fenetres(aujourdhui = new Date()) {
 
 const grille = (v) => Math.round(v * 10) / 10;
 
+/*
+   Clé du cache au bord du réseau : la maille ET la version du moteur. Sans
+   cette seconde partie, déployer un moteur qui calcule un indicateur de plus
+   continuerait à servir l'ancien profil pendant trente jours — le cache
+   travaillerait contre la correction qu'on vient de publier. C'est arrivé.
+*/
+export function urlCacheEdge(la, lo, version = VERSION_MOTEUR_CLIMAT) {
+  return `https://permavore.pages.dev/api/climat?v=${version}&lat=${la}&lng=${lo}`;
+}
+
 // Diagnostic renvoyé en cas d'échec : sans lui, « source indisponible » ne dit
 // pas si la source a refusé, expiré ou renvoyé une charge inattendue.
 const dernierEchec = { statut: null, message: null, urlType: null };
@@ -89,13 +99,7 @@ export async function onRequestGet({ request }) {
   }
   const la = grille(lat), lo = grille(lng);
 
-  // Clé de cache : la grille ET la version du moteur. Sans cette seconde
-  // partie, déployer un moteur qui calcule un indicateur de plus continuerait
-  // à servir l'ancien profil pendant trente jours — le cache travaillerait
-  // contre la correction qu'on vient de publier.
-  const cleCache = new Request(
-    `https://permavore.pages.dev/api/climat?v=${VERSION_MOTEUR_CLIMAT}&lat=${la}&lng=${lo}`,
-    { method: "GET" });
+  const cleCache = new Request(urlCacheEdge(la, lo), { method: "GET" });
   const cache = caches.default;
   const enCache = await cache.match(cleCache);
   if (enCache) return enCache;

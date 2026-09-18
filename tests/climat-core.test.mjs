@@ -461,15 +461,17 @@ test("une culture à photopériode est incompatible là où le jour est trop cou
   const joursLongs = {
     cultiveeComme: "annuelle",
     cycle: { joursMaturite: source(150, "jours") },
-    photoperiode: { heuresMin: source(14, "heures de jour") },
+    photoperiode: { source: source(1, "groupes"), groupes: [{ nom: "jours longs", heures: [14, 16] }] },
   };
   const sousEquateur = compatibiliteActuelle(joursLongs, equateur);
   assert.equal(sousEquateur.dimensions.photoperiode.etat, "defavorable");
+  assert.deepEqual(sousEquateur.dimensions.photoperiode.groupesPossibles, []);
   assert.equal(sousEquateur.compatibilite, "incompatible",
     "aucune saison ne rattrapera un jour qui ne dépasse jamais douze heures");
 
   const sousTempere = compatibiliteActuelle(joursLongs, tempere);
-  assert.equal(sousTempere.dimensions.photoperiode.etat, "favorable");
+  assert.notEqual(sousTempere.dimensions.photoperiode.etat, "defavorable");
+  assert.deepEqual(sousTempere.dimensions.photoperiode.groupesPossibles, ["jours longs"]);
   assert.notEqual(sousTempere.compatibilite, "incompatible");
 });
 
@@ -478,9 +480,101 @@ test("une culture à jours courts reste possible sous l'équateur", () => {
   const joursCourts = {
     cultiveeComme: "annuelle",
     cycle: { joursMaturite: source(150, "jours") },
-    photoperiode: { heuresMin: source(10, "heures de jour") },
+    photoperiode: { source: source(1, "groupes"), groupes: [{ nom: "jours courts", heures: [10, 12] }] },
   };
   const r = compatibiliteActuelle(joursCourts, equateur);
-  assert.equal(r.dimensions.photoperiode.etat, "favorable");
-  assert.equal(r.compatibilite, "compatible");
+  assert.notEqual(r.dimensions.photoperiode.etat, "defavorable");
+  assert.deepEqual(r.dimensions.photoperiode.groupesPossibles, ["jours courts"]);
+});
+
+/* ---------------------------------------------------------------------------
+   Deux généralisations abusives à ne plus commettre : confondre un besoin
+   VARIÉTAL avec une propriété d'espèce, et une durée liée au MODE
+   D'IMPLANTATION avec une exigence universelle.
+   --------------------------------------------------------------------------- */
+
+const oignonTypique = () => ({
+  cultiveeComme: "annuelle",
+  cycle: {
+    joursMaturite: { ...source(150, "jours"), modeImplantation: "semis_direct" },
+    autresModes: [{ mode: "bulbille", dureeConnue: false }],
+  },
+  photoperiode: {
+    source: source(1, "groupes"),
+    groupes: [
+      { nom: "jours courts", heures: [10, 12] },
+      { nom: "jours intermédiaires", heures: [12, 14] },
+      { nom: "jours longs", heures: [14, 16] },
+    ],
+  },
+});
+
+test("un besoin photopériodique variétal ne devient pas une propriété d'espèce", () => {
+  const equateur = profilClimatique(serie({ tmoy: 27, amplitude: 2 }), 0.3);
+  const r = compatibiliteActuelle(oignonTypique(), equateur);
+  const ph = r.dimensions.photoperiode;
+
+  assert.equal(ph.dependVariete, true);
+  assert.notEqual(ph.etat, "favorable",
+    "on ne déclare pas l'espèce favorable parce qu'UN groupe variétal convient");
+  assert.equal(ph.etat, "inconnu");
+  assert.equal(ph.groupesPossibles.includes("jours longs"), false,
+    "à 12 h de jour, aucune variété à jours longs ne bulbera jamais");
+  assert.equal(ph.groupesPossibles[0], "jours courts");
+  assert.equal(ph.groupeIndique, "jours courts",
+    "le groupe indiqué est celui dont la plage encadre la longueur du jour");
+  // Et cette dimension non évaluable interdit de conclure « éprouvé ».
+  assert.notEqual(r.statutLocal, "eprouve");
+});
+
+test("plus le jour s'allonge, plus de groupes variétaux deviennent possibles", () => {
+  const tempere = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+  const ph = compatibiliteActuelle(oignonTypique(), tempere).dimensions.photoperiode;
+  assert.ok(ph.lieu > 15, `jour le plus long à 45° : ${ph.lieu} h`);
+  assert.deepEqual(ph.groupesPossibles, ["jours courts", "jours intermédiaires", "jours longs"]);
+  assert.equal(ph.groupeIndique, "jours longs");
+  assert.equal(ph.etat, "inconnu", "toujours pas « favorable » : la variété reste inconnue");
+});
+
+test("aucun groupe variétal possible rend la culture incompatible", () => {
+  // Cas théorique : une culture qui exigerait plus de jour qu'il n'y en a.
+  const equateur = profilClimatique(serie({ tmoy: 27, amplitude: 2 }), 0.3);
+  const exigeante = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: { ...source(100, "jours"), modeImplantation: "semis_direct" } },
+    photoperiode: { source: source(1, "groupes"), groupes: [{ nom: "jours longs", heures: [14, 16] }] },
+  };
+  const r = compatibiliteActuelle(exigeante, equateur);
+  assert.equal(r.dimensions.photoperiode.etat, "defavorable");
+  assert.deepEqual(r.dimensions.photoperiode.groupesPossibles, []);
+  assert.equal(r.compatibilite, "incompatible");
+});
+
+test("une durée de cycle porte son mode d'implantation et ne vaut que pour lui", () => {
+  const court = profilClimatique(serie({ tmoy: 7, amplitude: 13 }), 50);
+  const r = compatibiliteActuelle(oignonTypique(), court);
+  assert.equal(r.dimensions.cycle.modeImplantation, "semis_direct");
+  assert.ok(Array.isArray(r.dimensions.cycle.autresModes));
+  assert.equal(r.dimensions.cycle.autresModes[0].mode, "bulbille");
+  assert.equal(r.dimensions.cycle.autresModes[0].dureeConnue, false,
+    "d'autres modes existent, leur durée n'est pas documentée — et on le dit");
+});
+
+test("la même culture installée autrement n'est pas jugée sur la mauvaise durée", () => {
+  const court = profilClimatique(serie({ tmoy: 8, amplitude: 12 }), 50);
+  const semeEnPlace = oignonTypique();
+  const enBulbilles = {
+    ...semeEnPlace,
+    cycle: { joursMaturite: { ...source(90, "jours"), modeImplantation: "bulbille" } },
+  };
+  const a = compatibiliteActuelle(semeEnPlace, court).dimensions.cycle;
+  const b = compatibiliteActuelle(enBulbilles, court).dimensions.cycle;
+  assert.equal(a.requis, 150);
+  assert.equal(b.requis, 90);
+  assert.equal(a.modeImplantation, "semis_direct");
+  assert.equal(b.modeImplantation, "bulbille");
+  // Une saison qui ne suffit pas au semis direct peut suffire aux bulbilles.
+  const rang = { defavorable: 0, limite: 1, inconnu: 1, favorable: 2 };
+  assert.ok(rang[b.etat] >= rang[a.etat],
+    `installer autrement ne doit jamais dégrader le verdict (${a.etat} → ${b.etat}, saison ${a.lieu} j)`);
 });

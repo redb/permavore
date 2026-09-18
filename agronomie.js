@@ -70,6 +70,7 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 120, unite: "jours", confiance: "haute",
+        modeImplantation: "plant",
         source: "Clemson Cooperative Extension (HGIC), Sweetpotato",
         url: "https://hgic.clemson.edu/factsheet/sweet-potato/", annee: 2022,
         note: "90 à 120 jours du plant à la récolte selon le cultivar ; on retient la borne haute, prudente. Aucune source institutionnelle n'exprime le besoin en jours SANS GEL : il est ici déduit de la durée du cycle." },
@@ -103,6 +104,7 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 55, unite: "jours", confiance: "moyenne",
+        modeImplantation: "semis_direct",
         source: "Clemson Cooperative Extension (HGIC), Summer Squash",
         url: "https://hgic.clemson.edu/factsheet/summer-squash/", annee: 2023,
         note: "Première récolte environ 55 jours après plantation. La FAO donne 90 à 100 jours, mais pour le cycle COMPLET incluant toute la période de récolte : les deux ne mesurent pas la même chose. On retient la durée la plus courte documentée jusqu'à la première récolte, puisque c'est elle qui dit si le cycle tient dans la saison." },
@@ -135,6 +137,7 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 90, unite: "jours", confiance: "haute",
+        modeImplantation: "semis_direct",
         source: "University of Georgia Extension, Bulletin 1175",
         url: "https://fieldreport.caes.uga.edu/publications/B1175/commercial-production-and-management-of-carrots/",
         annee: 2012,
@@ -168,6 +171,7 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 55, unite: "jours", confiance: "moyenne",
+        modeImplantation: "semis_sous_abri_repiquage",
         source: "Clemson Cooperative Extension (HGIC), Lettuce",
         url: "https://hgic.clemson.edu/factsheet/lettuce/", annee: 2023,
         note: "Laitue pommée dès 55 jours selon la variété ; laitue à couper environ 75 jours. On retient la plus courte durée documentée. La FAO donne 75 à 140 jours selon la date de plantation, sans préciser si le décompte part du semis ou du repiquage — imprécision qui interdit de s'en servir seule." },
@@ -199,6 +203,7 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 55, unite: "jours", confiance: "moyenne",
+        modeImplantation: "semis_direct",
         source: "Clemson Cooperative Extension (HGIC), Bush & Pole-Type Snap Beans",
         url: "https://hgic.clemson.edu/factsheet/bush-pole-type-snap-beans/", annee: null,
         note: "Première cueillette vers 55 jours. La FAO donne 75 à 90 jours pour le cycle complet, période de récolte comprise : définitions différentes, pas un conflit." },
@@ -238,15 +243,25 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 150, unite: "jours", confiance: "haute",
+        modeImplantation: "semis_direct",
         source: "FAO Irrigation and Drainage Paper 56, table 11, ligne « Onion (dry) »",
         url: "https://www.fao.org/4/x0490e/x0490e0b.htm", annee: 1998,
-        note: "150 à 210 jours du semis à la fin de récolte pour l'oignon de garde ; on retient la borne basse. L'oignon botte se récolte bien plus tôt (70 jours), mais c'est un autre usage." },
+        note: "150 à 210 jours pour l'oignon de garde SEMÉ EN PLACE ; on retient la borne basse. Cette durée vaut pour ce mode d'implantation et pour lui seul : elle ne dit rien de ce qu'exige un oignon planté en bulbilles ou en plants, qui passe bien moins de temps au champ. L'oignon botte se récolte vers 70 jours, mais c'est un autre usage." },
+      // Modes couramment pratiqués dont la durée au champ n'a PAS été trouvée
+      // chiffrée. Les nommer évite de faire passer la durée du semis direct
+      // pour une limite de l'espèce.
+      autresModes: [
+        { mode: "bulbille", dureeConnue: false,
+          note: "Pratique courante là où la saison est courte ; aucune durée sourcée trouvée." },
+        { mode: "semis_sous_abri_repiquage", dureeConnue: false,
+          note: "Une partie du cycle se fait alors hors saison extérieure ; aucune durée sourcée trouvée." },
+      ],
     },
     photoperiode: {
-      heuresMin: { valeur: 10, unite: "heures de jour", confiance: "haute",
+      source: { valeur: 1, unite: "groupes variétaux", confiance: "haute",
         source: "NC State Extension, Bulb Onions ; Oregon State University, Types of Onions and Varieties",
         url: "https://content.ces.ncsu.edu/bulb-onions", annee: null,
-        note: "Seuil le plus bas toutes variétés confondues : en dessous d'environ 10 heures de jour, aucune variété ne bulbe. Ce n'est PAS une garantie que n'importe quelle variété conviendra — voir les groupes ci-dessous." },
+        note: "La bulbaison se déclenche sur la longueur du jour. Le seuil dépend du GROUPE VARIÉTAL, pas de l'espèce : dire « l'oignon convient ici » parce qu'un groupe convient serait faux pour les deux autres." },
       groupes: [
         { nom: "jours courts", heures: [10, 12], ou: "basses latitudes" },
         { nom: "jours intermédiaires", heures: [12, 14], ou: "latitudes moyennes" },
@@ -276,6 +291,7 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 100, unite: "jours", confiance: "haute",
+        modeImplantation: "plant",
         source: "FAO Land & Water, Crop Information — Tomato (d'après Irrigation and Drainage Paper 33)",
         url: "https://web.archive.org/web/2023id_/https://www.fao.org/land-water/databases-and-software/crop-information/tomato/en/",
         annee: 2002,
@@ -306,6 +322,7 @@ const PROFILS_AGROCLIMATIQUES = {
     cultiveeComme: "annuelle", perenne: false,
     cycle: {
       joursMaturite: { valeur: 120, unite: "jours", confiance: "haute",
+        modeImplantation: "plant",
         source: "FAO Land & Water, Crop Information — Potato",
         url: "https://web.archive.org/web/2023id_/https://www.fao.org/land-water/databases-and-software/crop-information/potato/en/",
         annee: 2002,
