@@ -335,6 +335,9 @@ function chargerPreferencesJardin() {
     const zone = typeof brut.zone === "string" && Object.hasOwn(ZONES, brut.zone)
       ? brut.zone : "tempere";
     const vue = brut.vue === "cartes" ? "cartes" : "liste";
+    if (typeof brut.climatMonde === "string" && CLIMATS_MONDE.some(c => c.id === brut.climatMonde)) {
+      state.climatMonde = brut.climatMonde;
+    }
 
     state.surface = Number.isInteger(surface) && surface >= 1 && surface <= 10000
       ? surface : null;
@@ -365,6 +368,7 @@ function sauverPreferencesJardin() {
       ville: $("#ville")?.value.trim().slice(0, 120) || "",
       surface: state.surface,
       zone: state.zone,
+      climatMonde: state.climatMonde || null,
       vue: state.vue,
       categorie: state.categorie,
       cycle: state.cycle,
@@ -2120,10 +2124,15 @@ function remplirGrille(sel, liste, sectionSel, countSel) {
 // ---------- Zone : maj UI ----------
 function majZone(zone, source) {
   state.zone = zone;
-  const z = ZONES[zone];
-  $("#zone").value = zone;
-  $("#badge-zone").innerHTML = `${z.emoji} ${z.label}`;
-  $("#zone-note").textContent = (source ? source + " · " : "") + z.note;
+  // L'affichage parle le vocabulaire mondial ; la zone interne reste le pont
+  // vers les calendriers hérités, invisible pour le jardinier.
+  if (!state.climatMonde || zoneInterneDuClimat(state.climatMonde) !== zone) {
+    state.climatMonde = climatMondePourZone(zone);
+  }
+  const c = CLIMATS_MONDE.find(x => x.id === state.climatMonde) || CLIMATS_MONDE[6];
+  $("#zone").value = state.climatMonde;
+  $("#badge-zone").innerHTML = `${c.emoji} ${c.label}`;
+  $("#zone-note").textContent = (source ? source + " · " : "") + c.note;
   sauverPreferencesJardin();
   majClimatDetecte();
   rendre();
@@ -2211,20 +2220,23 @@ function init() {
   traduireStatique();
   construireSelecteurLangue();
 
-  // Peupler le select des zones
+  // Peupler le select avec les climats du MONDE, pas les cinq zones françaises.
   const sel = $("#zone");
-  Object.entries(ZONES).forEach(([k, z]) => {
-    const o = el("option"); o.value = k; o.textContent = `${z.emoji} ${z.label}`;
+  CLIMATS_MONDE.forEach(c => {
+    const o = el("option"); o.value = c.id;
+    o.textContent = `${c.emoji} ${c.label}`;
     sel.appendChild(o);
   });
   chargerPreferencesJardin();
-  sel.value = state.zone;
+  sel.value = climatMondePourZone(state.climatMonde || state.zone);
   $("#vue-liste").classList.toggle("actif", state.vue === "liste");
   $("#vue-cartes").classList.toggle("actif", state.vue === "cartes");
 
   sel.addEventListener("change", () => {
+    state.climatMonde = sel.value;
     state._zoneManuelle = true;
-    majZone(sel.value, getLang() === "en" ? "Manual choice" : "Choix manuel");
+    // Le select porte un climat MONDIAL ; la zone interne héritée s'en déduit.
+    majZone(zoneInterneDuClimat(sel.value), getLang() === "en" ? "Manual choice" : "Choix manuel");
   });
 
   // Autocomplétion de ville (BAN)
@@ -2819,6 +2831,18 @@ function blocChezToiHTML(plante) {
 
 // La fiche ouverte se met à jour quand le climat arrive, sans la refermer.
 if (typeof document !== "undefined") {
+  // Quand le moteur a classé le climat du lieu (Köppen), on aligne le
+  // sélecteur — sauf si le jardinier a choisi lui-même.
+  document.addEventListener("climat:maj", () => {
+    if (state._zoneManuelle || !climatPret()) return;
+    const code = window.Climat.climat()?.code;
+    const id = code ? climatMondeDepuisKoppen(code) : null;
+    if (id && id !== state.climatMonde) {
+      state.climatMonde = id;
+      majZone(zoneInterneDuClimat(id), `🌍 ${code}`);
+    }
+  });
+
   document.addEventListener("climat:maj", () => {
     const bloc = document.querySelector(".bloc-chez-toi");
     if (!bloc || !state.planteOuverte) return;

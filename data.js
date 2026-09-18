@@ -62,6 +62,79 @@ const ZONES = {
 
 // --- Correspondance villes -> zone (échantillon élargi, minuscules sans accents) ---
 // Noms de villes françaises : NE PAS TRADUIRE (noms propres).
+/*
+   Climats du monde proposés au jardinier, ordonnés du plus chaud au plus froid.
+
+   La liste précédente — méditerranéen, océanique, tempéré, continental,
+   montagne — décrivait la France et rien d'autre : un jardinier de Kampala ou
+   de Melbourne n'y trouvait pas son climat. Celle-ci suit les grands groupes de
+   Köppen-Geiger, valables partout.
+
+   `zoneInterne` fait le pont avec les cinq zones héritées, dont dépendent
+   encore les calendriers de semis exprimés en mois (voir l'avertissement en
+   tête de ce fichier). Ce pont est PROVISOIRE : il disparaîtra quand les
+   calendriers seront dérivés des conditions locales. Il est isolé ici plutôt
+   que dispersé dans le code, pour qu'on puisse le retirer d'un bloc.
+*/
+const CLIMATS_MONDE = [
+  { id: "tropical_humide", emoji: "🌴", koppen: "Af, Am", zoneInterne: "mediterraneen",
+    label: bi("Tropical humide", "Tropical rainforest"),
+    note: bi("Chaud toute l'année, pluies abondantes, pas de gel.", "Warm year-round, heavy rain, no frost.") },
+  { id: "tropical_saisons", emoji: "🌦️", koppen: "Aw, As", zoneInterne: "mediterraneen",
+    label: bi("Tropical à saison sèche", "Tropical with a dry season"),
+    note: bi("Chaud toute l'année, alternance saison sèche et saison des pluies.", "Warm year-round, alternating wet and dry seasons.") },
+  { id: "aride_chaud", emoji: "🏜️", koppen: "BWh, BSh", zoneInterne: "mediterraneen",
+    label: bi("Aride chaud", "Hot arid"),
+    note: bi("Sec et chaud : l'eau, pas le froid, commande le calendrier.", "Dry and hot: water, not cold, sets the calendar.") },
+  { id: "subtropical_humide", emoji: "🌺", koppen: "Cfa, Cwa", zoneInterne: "mediterraneen",
+    label: bi("Subtropical humide", "Humid subtropical"),
+    note: bi("Étés chauds et humides, hivers doux, gelées rares.", "Hot humid summers, mild winters, rare frost.") },
+  { id: "mediterraneen", emoji: "🌞", koppen: "Csa, Csb", zoneInterne: "mediterraneen",
+    label: bi("Méditerranéen", "Mediterranean"),
+    note: bi("Hivers doux, étés chauds et secs. Saison longue.", "Mild winters, hot dry summers. Long season.") },
+  { id: "oceanique", emoji: "🌊", koppen: "Cfb, Cfc", zoneInterne: "oceanique",
+    label: bi("Océanique (doux, humide)", "Oceanic (mild, wet)"),
+    note: bi("Hivers doux, pluies fréquentes, gelées rares.", "Mild winters, frequent rain, rare frost.") },
+  { id: "tempere", emoji: "🍃", koppen: "Cfb", zoneInterne: "tempere",
+    label: bi("Tempéré (référence)", "Temperate (reference)"),
+    note: bi("Saisons marquées, gel hivernal modéré.", "Marked seasons, moderate winter frost.") },
+  { id: "aride_froid", emoji: "🌵", koppen: "BWk, BSk", zoneInterne: "continental",
+    label: bi("Aride froid", "Cold arid"),
+    note: bi("Sec, étés chauds et hivers froids : deux contraintes à la fois.", "Dry, hot summers and cold winters: two constraints at once.") },
+  { id: "continental", emoji: "❄️", koppen: "Dfa, Dfb, Dwa, Dwb", zoneInterne: "continental",
+    label: bi("Continental (hivers froids)", "Continental (cold winters)"),
+    note: bi("Hivers froids, gelées tardives : les frileuses attendent, pas les rustiques.", "Cold winters, late frosts: frost-sensitive plants wait, hardy ones don't.") },
+  { id: "continental_froid", emoji: "🧊", koppen: "Dfc, Dfd, Dsc", zoneInterne: "montagne",
+    label: bi("Continental froid (saison courte)", "Cold continental (short season)"),
+    note: bi("Hivers rigoureux, saison sans gel brève.", "Harsh winters, brief frost-free season.") },
+  { id: "montagne_polaire", emoji: "⛰️", koppen: "ET, EF", zoneInterne: "montagne",
+    label: bi("Montagne ou polaire", "Mountain or polar"),
+    note: bi("Été court et frais : seules les cultures rapides aboutissent.", "Short cool summer: only fast crops finish.") },
+];
+
+/** Zone interne (héritée) correspondant à un climat mondial. */
+function zoneInterneDuClimat(id) {
+  const c = CLIMATS_MONDE.find(x => x.id === id);
+  return c ? c.zoneInterne : null;
+}
+
+/** Climat mondial proposé par défaut pour une zone interne donnée. */
+function climatMondePourZone(zone) {
+  const c = CLIMATS_MONDE.find(x => x.id === zone) || CLIMATS_MONDE.find(x => x.zoneInterne === zone);
+  return c ? c.id : "tempere";
+}
+
+/** Climat mondial correspondant à un code Köppen calculé (ex. « Cfb »). */
+function climatMondeDepuisKoppen(code) {
+  if (typeof code !== "string" || !code) return null;
+  const exact = CLIMATS_MONDE.find(c => c.koppen.split(", ").includes(code));
+  if (exact) return exact.id;
+  // À défaut du code complet, on retombe sur le groupe (première lettre).
+  const groupe = code[0];
+  const parGroupe = { A: "tropical_humide", B: "aride_chaud", C: "tempere", D: "continental", E: "montagne_polaire" };
+  return parGroupe[groupe] || null;
+}
+
 const VILLES_ZONES = {
   // Méditerranéen
   "marseille": "mediterraneen", "nice": "mediterraneen", "toulon": "mediterraneen",
