@@ -44,6 +44,16 @@
                                       la production. Contrainte géographique
                                       dure : sous l'équateur le jour ne dépasse
                                       jamais ~12 h.
+     montaison.declencheur            "photoperiode" | "vernalisation" | "mixte".
+                                      Le déclencheur diffère radicalement selon
+                                      l'espèce : l'épinard part à graine sous
+                                      jours longs, le poireau après un froid.
+                                      La résistance est un caractère VARIÉTAL :
+                                      le moteur n'en conclut jamais rien au
+                                      niveau de l'espèce.
+     cycle.stades                     récoltes à plusieurs stades (jeunes
+                                      feuilles, jeune racine, maturité), quand
+                                      les sources les distinguent.
      germination.tempMinSol           température minimale de germination.
                                       Documentée, pas encore exploitée par le
                                       moteur — à ne pas confondre avec un seuil
@@ -281,6 +291,234 @@ const PROFILS_AGROCLIMATIQUES = {
         source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
         url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
         annee: 2013 },
+    },
+  },
+
+
+  /* ======================= LOT 2 ======================= */
+
+  /* --- Radis --------------------------------------------------------------
+     Introuvable : seuil de température ou d'heures de jour déclenchant la
+     montaison. Les seules données chiffrées viennent d'UN SEUL cultivar
+     (Erwin 2002) ; les sources d'extension ne parlent que de « hautes
+     températures estivales », sans chiffre. Ky absent de la table 24. */
+  "radis": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 25, unite: "jours", confiance: "haute",
+        modeImplantation: "semis_direct",
+        source: "Utah State University Extension, Radishes in the Garden (D. Drost)",
+        url: "https://extension.usu.edu/yardandgarden/research/radishes-in-the-garden",
+        annee: 2020,
+        note: "« Roots are mature 25-45 days from seeding depending on variety » : la source formule elle-même une fourchette d'ESPÈCE, et on en retient la borne courte. Les radis d'hiver (daikon) sont un autre type, 50 à 60 jours." },
+      stades: [
+        { nom: "racine de printemps", jours: [25, 45], source: "Utah State University Extension, 2020" },
+        { nom: "radis d'hiver / daikon", jours: [50, 60], source: "Iowa State University Extension, 2023",
+          note: "Type distinct, pas un stade du même plant." },
+      ],
+    },
+    montaison: {
+      declencheur: "mixte",
+      source: { valeur: 1, unite: "voies documentées", confiance: "moyenne",
+        source: "Erwin, Warner & Smith, Physiologia Plantarum 115(2):298-302 ; Utah State University Extension",
+        url: "https://pubmed.ncbi.nlm.nih.gov/12060249/", annee: 2002,
+        note: "Le radis fleurit sous jours longs SANS aucun froid (45 % contre 3 % en jours courts), et répond aussi au froid de façon quantitative (6 °C, saturation en 4 à 8 jours). Mais ces chiffres portent sur un seul cultivar, et les sources d'extension ne donnent aucune température seuil : « hautes températures estivales », rien de plus. Aucun seuil n'est donc inscrit." },
+    },
+    eau: {
+      pFAO: { valeur: 0.30, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Enracinement 0,3 à 0,5 m. Absent de la table 24 : aucun Ky." },
+    },
+    germination: {
+      tempMinSol: { valeur: 4.4, unite: "°C (sol)", confiance: "haute",
+        source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
+        url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
+        annee: 2013,
+        note: "Désaccord sur l'optimum : 29 °C pour la germination la plus rapide selon Harrington, 13 à 24 °C pour la conduite de culture selon Utah State. Deux définitions, pas une contradiction." },
+    },
+  },
+
+  /* --- Poireau ------------------------------------------------------------
+     CAS LIMITE DU LOT : le poireau est ABSENT des tables 11, 12, 22 et 24 de
+     la FAO — vérifié par extraction du texte, pas déduit. Ni p, ni profondeur
+     d'enracinement, ni Ky, ni température de germination. Les valeurs de
+     l'oignon ne sont PAS transposables et ne le seront pas. Sa durée de cycle
+     varie de 50 à 180 jours selon le cultivar, soit un facteur 3,6 : parler
+     d'une durée « du poireau » serait faux. */
+  "poireau": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 60, unite: "jours", confiance: "haute",
+        modeImplantation: "semis_direct",
+        source: "Utah State University Extension, Leeks in the Garden (D. Drost)",
+        url: "https://extension.usu.edu/yardandgarden/research/leeks-in-the-garden",
+        annee: 2020,
+        note: "« May be harvested as early as 60 days after seeding but generally require 100-120 days to mature. » C'est la seule source trouvée qui précise son point de départ. L'amplitude variétale va de 50 jours ('Varna') à 180 ('Laura') : cette fourchette appartient aux VARIÉTÉS, pas à l'espèce." },
+      autresModes: [
+        { mode: "semis_sous_abri_repiquage", dureeConnue: false,
+          note: "Pratique dominante. Les durées « depuis le repiquage » trouvées (75 à 120 jours) proviennent de pages inaccessibles et n'ont pas été vérifiées." },
+      ],
+      stades: [
+        { nom: "poireau jeune", jours: [60, 60], source: "Utah State University Extension, 2020" },
+        { nom: "maturité (fût de 2,5 cm)", jours: [100, 120], source: "Utah State University Extension, 2020" },
+      ],
+    },
+    montaison: {
+      declencheur: "vernalisation",
+      vernalisation: {
+        temperature: { valeur: 5, unite: "°C (optimum d'induction)", confiance: "moyenne",
+          source: "Wiebe H.J., Scientia Horticulturae 59(3-4):177-185",
+          url: "https://www.sciencedirect.com/science/article/abs/pii/0304423894900116", annee: 1994,
+          note: "Plage inductive 0 à 18 °C, optimum 5 °C, dévernalisation au-dessus de 18 °C. La phase juvénile se lève vers 2 g ou cinq feuilles. C'est le FROID qui déclenche — exactement l'inverse de l'épinard. La DURÉE de vernalisation nécessaire n'a pas été trouvée pour le poireau ; le chiffre « 10 à 15 semaines à 5 °C » qui circule concerne l'échalote et n'est pas transposé." },
+      },
+    },
+    // eau : rien. Le poireau est absent de la table 22 de la FAO, et aucune
+    // autre source sérieuse n'a été trouvée. Reprendre les valeurs de l'oignon
+    // serait exactement le genre d'emprunt que ce projet s'interdit.
+    // germination : rien non plus. Le poireau est absent de la table Harrington.
+  },
+
+  /* --- Épinard ------------------------------------------------------------
+     Montaison pilotée par la LONGUEUR DU JOUR, la chaleur ne faisant
+     qu'accélérer — « il monte en juin même si les températures sont fraîches »
+     (Penn State). Aucune vernalisation : l'épinard hiverne et monte au
+     printemps parce que les jours s'allongent, pas parce qu'il a eu froid.
+     Introuvable : un seuil horaire citable tel quel. On inscrit les deux
+     mesures de Chun (2001), pas une valeur intermédiaire fabriquée. */
+  "epinard": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 50, unite: "jours", confiance: "moyenne",
+        modeImplantation: "semis_direct",
+        source: "Utah State University Extension, Spinach in the Garden (D. Drost)",
+        url: "https://extension.usu.edu/yardandgarden/research/spinach-in-the-garden",
+        annee: 2020,
+        note: "« Semer 50 à 75 jours avant la date de maturité visée » : borne courte retenue. Les durées de 30 à 48 jours trouvées ailleurs sont strictement variétales ('Regal' 30 jours n'est pas « l'épinard »)." },
+      stades: [
+        { nom: "feuilles cueillies à la demande", jours: null,
+          source: "Utah State University Extension, 2020",
+          note: "Possible à tout moment avant la hampe florale, feuilles externes dès 7,6 cm. Aucune durée chiffrée : un repère morphologique." },
+        { nom: "plant entier", jours: [50, 75], source: "Utah State University Extension, 2020" },
+      ],
+    },
+    montaison: {
+      declencheur: "photoperiode",
+      heuresRisqueEleve: { valeur: 16, unite: "heures de jour", confiance: "moyenne",
+        source: "Chun C., Tominaga M., Kozai T., HortScience 36(5):889-892",
+        url: "https://snu.elsevierpure.com/en/publications/floral-development-and-bolting-of-spinach-as-affected-by-photoper/",
+        annee: 2001,
+        note: "Mesuré : 0 % de montaison à 10 heures de jour, plus de 85 % à 16 heures. La bascule se situe entre 13 et 16 heures, sans qu'aucune source ne publie de seuil unique — on inscrit donc les deux mesures et pas une valeur intermédiaire inventée. La chaleur accélère sans déclencher : Penn State note une montaison en juin même par temps frais. La résistance est un caractère variétal reconnu." },
+      heuresRisqueFaible: { valeur: 10, unite: "heures de jour", confiance: "moyenne",
+        source: "Chun C., Tominaga M., Kozai T., HortScience 36(5):889-892",
+        url: "https://snu.elsevierpure.com/en/publications/floral-development-and-bolting-of-spinach-as-affected-by-photoper/",
+        annee: 2001 },
+    },
+    eau: {
+      pFAO: { valeur: 0.20, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998,
+        note: "La plus faible valeur de tout le catalogue : l'épinard supporte très mal le dessèchement du sol. Enracinement 0,3 à 0,5 m. Absent de la table 24 : aucun Ky." },
+    },
+    germination: {
+      tempMinSol: { valeur: 1.7, unite: "°C (sol)", confiance: "haute",
+        source: "J. F. Harrington (UC Davis), table diffusée par OSU Extension",
+        url: "https://extension.oregonstate.edu/gardening/soil-compost/soil-temperature-conditions-vegetable-seed-germination",
+        annee: 2013, note: "Germination réduite au-delà de 26,7 °C selon Utah State." },
+    },
+  },
+
+  /* --- Betterave potagère -------------------------------------------------
+     PIÈGE ÉVITÉ : la betterave sucrière figure dans la table 24 de la FAO avec
+     un Ky de 1,0, et dans la table 22 avec p = 0,55. Ni l'un ni l'autre n'est
+     transposable : organe récolté et base de rendement différents, cultivars
+     sélectionnés sur des critères opposés — la sucrière l'est justement pour sa
+     RÉSISTANCE à la montaison. La table 22 a bien une ligne « Beets, table »,
+     distincte : c'est elle qui est utilisée. La table 24 n'en a pas. */
+  "betterave": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 50, unite: "jours", confiance: "moyenne",
+        modeImplantation: "semis_direct",
+        source: "SDSU Extension, Table Beets: Harvest and Storage ; Oregon State University Extension",
+        url: "https://extension.sdstate.edu/table-beets-harvest-and-storage", annee: 2023,
+        note: "50 à 70 jours après semis pour une racine de calibre balle de golf. Utah State donne 60 à 80 jours : désaccord signalé, non moyenné — on retient la borne la plus courte documentée." },
+      stades: [
+        { nom: "feuilles", jours: null, source: "Utah State University Extension, 2020",
+          note: "Récoltables dès 10 à 15 cm de hauteur. Aucune durée chiffrée dans les sources universitaires." },
+        { nom: "racine mature", jours: [50, 80], source: "SDSU Extension 2023 ; Utah State University Extension 2020" },
+      ],
+    },
+    montaison: {
+      declencheur: "vernalisation",
+      vernalisation: {
+        temperature: { valeur: 7, unite: "°C (milieu de la fenêtre inductive)", confiance: "moyenne",
+          source: "Michigan State University Extension, Bolting in spring vegetables",
+          url: "https://www.canr.msu.edu/news/bolting-in-spring-vegetables", annee: 2020,
+          note: "Fenêtre 5,0 à 8,9 °C pendant une à cinq semaines, réceptivité dès le stade semence. L'université du Maryland donne un seuil différent — sous 10 °C pendant deux à trois semaines, et seulement après plusieurs vraies feuilles : les deux sources sont incompatibles sur la borne basse et sur le stade sensible, et ne sont pas moyennées. Dévernalisation au-dessus de 17,8 °C. Verrou supplémentaire : après vernalisation, la montaison réclame encore des jours longs. Toute la quantification fine qui circule (optimum 4 °C, 14 à 15 semaines) porte sur la betterave SUCRIÈRE et n'est pas transposée." },
+      },
+      autresCauses: [
+        { cause: "stress hydrique", quand: "six premières semaines",
+          source: "Utah State University Extension, 2020",
+          note: "« Water stress during the first 6 weeks of growth often leads to premature flowering. » Cause non vernalisante, à distinguer." },
+      ],
+    },
+    chaleur: {
+      seuilStressThermique: { valeur: 29.4, unite: "°C", confiance: "moyenne",
+        source: "Utah State University Extension, Beets in the Garden (D. Drost)",
+        url: "https://extension.usu.edu/yardandgarden/research/beets-in-the-garden", annee: 2020,
+        note: "Au-delà, racines fibreuses — mais l'effet est explicitement conditionné par le stress hydrique dans la source : « hot weather AND water stress ». Ce n'est donc pas un seuil thermique pur. Le zonage clair de la racine apparaît aussi hors de la plage 10 à 18 °C, sans seuil chiffré." },
+    },
+    eau: {
+      pFAO: { valeur: 0.50, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22, ligne « Beets, table »",
+        url: "https://www.fao.org/4/x0490e/x0490e0e.htm", annee: 1998,
+        note: "Enracinement 0,6 à 1,0 m. Absent de la table 24 : aucun Ky. Le Ky de 1,0 de la betterave sucrière n'est pas emprunté." },
+    },
+    germination: {
+      tempMinSol: { valeur: 4.4, unite: "°C (sol)", confiance: "haute",
+        source: "Utah State University Extension, Beets in the Garden (D. Drost)",
+        url: "https://extension.usu.edu/yardandgarden/research/beets-in-the-garden", annee: 2020,
+        note: "Optimum 12,8 à 23,9 °C, germination réduite au-delà de 26,7 °C. Le Maryland donne une plage plus large allant jusqu'à 29 °C : désaccord signalé." },
+    },
+  },
+
+  /* --- Concombre ----------------------------------------------------------
+     PIÈGE ÉVITÉ : la pastèque figure dans la table 24 avec un Ky de 1,1 et
+     c'est la seule cucurbitacée présente. Elle n'est pas empruntée : fruit
+     unique à maturité contre récolte échelonnée de fruits immatures.
+     Attention aussi à ne pas mélanger deux durées qui ne mesurent pas la même
+     chose : la FAO donne 105 à 130 jours pour le cycle COMPLET, les
+     extensions 50 à 70 jours jusqu'à la PREMIÈRE récolte. */
+  "concombre": {
+    cultiveeComme: "annuelle", perenne: false,
+    cycle: {
+      joursMaturite: { valeur: 50, unite: "jours", confiance: "haute",
+        modeImplantation: "semis_direct",
+        source: "UGA Cooperative Extension C1034 ; Clemson Cooperative Extension (HGIC)",
+        url: "https://fieldreport.caes.uga.edu/publications/C1034/", annee: 2024,
+        note: "50 à 70 jours jusqu'à la PREMIÈRE récolte, deux extensions concordantes. À ne pas confondre avec les 105 à 130 jours de la FAO, qui couvrent le cycle complet jusqu'à la fin de la récolte." },
+      autresModes: [
+        { mode: "plant", dureeConnue: true, ecartJours: -14,
+          source: "Utah State University Extension, 2020",
+          note: "« Transplants mature about 2 weeks before seeded cucumbers », pour un élevage de quatre à six semaines. L'Iowa donne deux à trois semaines d'élevage : désaccord sur la durée d'élevage, pas sur le principe." },
+      ],
+    },
+    chaleur: {
+      seuilStressThermique: { valeur: 32.2, unite: "°C", confiance: "haute",
+        source: "Penn State Extension, Growing Cucumbers in High Tunnels",
+        url: "https://extension.psu.edu/growing-cucumbers-in-high-tunnels", annee: 2024,
+        note: "Au-delà, échec reproductif : la nouaison décroche. Effet RÉVERSIBLE — elle reprend dès que la température repasse sous le seuil, ce n'est donc pas une perte de cycle. Un second seuil, à 35 °C, concerne l'avortement du pollen (Chen et al. 2021). L'amertume n'a pas de seuil absolu documenté : la seule valeur chiffrée trouvée est une AMPLITUDE de plus de 11 °C (Clemson), pas une température." },
+    },
+    eau: {
+      pFAO: { valeur: 0.50, unite: "fraction d'épuisement de la réserve utile", confiance: "haute",
+        source: "FAO Irrigation and Drainage Paper 56, table 22", url: "https://www.fao.org/4/x0490e/x0490e0e.htm",
+        annee: 1998, note: "Enracinement 0,7 à 1,2 m. Absent de la table 24 : aucun Ky, et celui de la pastèque n'est pas emprunté." },
+    },
+    germination: {
+      tempMinSol: { valeur: 10, unite: "°C (sol)", confiance: "haute",
+        source: "Clemson Cooperative Extension (HGIC), Cucumber",
+        url: "https://hgic.clemson.edu/factsheet/cucumber/", annee: null,
+        note: "Seuil absolu : la graine ne germe pas en dessous. En pratique les extensions recommandent d'attendre 15,6 à 21,1 °C. Germination supprimée vers 42 °C." },
     },
   },
 

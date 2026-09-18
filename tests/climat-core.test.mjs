@@ -578,3 +578,120 @@ test("la même culture installée autrement n'est pas jugée sur la mauvaise dur
   assert.ok(rang[b.etat] >= rang[a.etat],
     `installer autrement ne doit jamais dégrader le verdict (${a.etat} → ${b.etat}, saison ${a.lieu} j)`);
 });
+
+/* ---------------------------------------------------------------------------
+   Montaison : le déclencheur diffère radicalement selon l'espèce. Un seuil
+   unique aurait été faux pour au moins deux des cinq cultures du lot 2.
+   --------------------------------------------------------------------------- */
+
+test("la montaison de l'épinard se lit sur la longueur du jour", () => {
+  const nordique = profilClimatique(serie({ tmoy: 8, amplitude: 12 }), 55);
+  const equateur = profilClimatique(serie({ tmoy: 27, amplitude: 2 }), 0.3);
+  const epinard = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: { ...source(50, "jours"), modeImplantation: "semis_direct" } },
+    montaison: { declencheur: "photoperiode", heuresRisqueEleve: source(16, "heures de jour") },
+  };
+  const haut = compatibiliteActuelle(epinard, nordique).dimensions.montaison;
+  assert.equal(haut.declencheur, "photoperiode");
+  assert.ok(haut.heuresJourMax > 16, `à 55°, le jour atteint ${haut.heuresJourMax} h`);
+  assert.equal(haut.atteintSeuilEleve, true, "le risque de montaison existe bien là-haut");
+
+  const bas = compatibiliteActuelle(epinard, equateur).dimensions.montaison;
+  assert.equal(bas.atteintSeuilEleve, false, "sous l'équateur, le jour ne dépasse jamais douze heures");
+});
+
+test("la montaison du poireau se lit sur le froid, pas sur le jour", () => {
+  const froid = profilClimatique(serie({ tmoy: 6, amplitude: 13 }), 50);
+  const poireau = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: { ...source(60, "jours"), modeImplantation: "semis_direct" } },
+    montaison: { declencheur: "vernalisation",
+      vernalisation: { temperature: source(5, "°C") } },
+  };
+  const m = compatibiliteActuelle(poireau, froid).dimensions.montaison;
+  assert.equal(m.declencheur, "vernalisation");
+  assert.equal(Number.isFinite(m.minimumHivernal), true, "c'est l'hiver qui est regardé");
+  assert.equal(m.heuresJourMax, undefined, "et surtout pas la longueur du jour");
+});
+
+test("la montaison ne conclut jamais au niveau de l'espèce", () => {
+  // La résistance à la montaison est un caractère variétal dans les trois
+  // espèces où les sources se prononcent : le moteur ne tranche donc pas.
+  const lieu = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+  for (const declencheur of ["photoperiode", "vernalisation", "mixte"]) {
+    const culture = {
+      cultiveeComme: "annuelle",
+      cycle: { joursMaturite: { ...source(50, "jours"), modeImplantation: "semis_direct" } },
+      montaison: { declencheur, heuresRisqueEleve: source(16, "heures"),
+        vernalisation: { temperature: source(5, "°C") } },
+    };
+    const r = compatibiliteActuelle(culture, lieu);
+    assert.equal(r.dimensions.montaison.etat, "inconnu", declencheur);
+    assert.equal(r.dimensions.montaison.dependVariete, true);
+    assert.equal(r.dimensions.montaison.bloquant, false,
+      "un risque de montaison ne rend jamais une culture impossible");
+  }
+});
+
+test("une culture sans montaison documentée n'a tout simplement pas la dimension", () => {
+  const lieu = profilClimatique(serie({ tmoy: 11, amplitude: 9 }), 45);
+  const concombre = {
+    cultiveeComme: "annuelle",
+    cycle: { joursMaturite: { ...source(50, "jours"), modeImplantation: "semis_direct" } },
+  };
+  assert.equal(compatibiliteActuelle(concombre, lieu).dimensions.montaison, undefined);
+});
+
+test("les cultures du lot 2 se comportent identiquement dans les deux hémisphères", async () => {
+  // La validation en conditions réelles sur Melbourne reste bloquée par la
+  // limite de débit d'Open-Meteo. Ce test la remplace sans la contourner : il
+  // vérifie l'invariance exacte sur des séries synthétiques miroir, ce qu'un
+  // relevé unique ne prouverait de toute façon pas.
+  const { readFileSync } = await import("node:fs");
+  const vmMod = await import("node:vm");
+  const ctx = { window: {} };
+  vmMod.createContext(ctx);
+  vmMod.runInContext(readFileSync(new URL("../agronomie.js", import.meta.url), "utf8"), ctx);
+  const profils = ctx.window.PROFILS_AGROCLIMATIQUES;
+
+  const nord = profilClimatique(serie({ tmoy: 11, amplitude: 9, dephasage: 6 }), 45);
+  const sud = profilClimatique(serie({ tmoy: 11, amplitude: 9, dephasage: 0 }), -45);
+  assert.equal(nord.hemisphere, "nord");
+  assert.equal(sud.hemisphere, "sud");
+  assert.equal(nord.heuresJourMax, sud.heuresJourMax, "même latitude, même jour le plus long");
+
+  for (const id of ["radis", "poireau", "epinard", "betterave", "concombre"]) {
+    const a = compatibiliteActuelle(profils[id], nord);
+    const b = compatibiliteActuelle(profils[id], sud);
+    assert.equal(a.compatibilite, b.compatibilite, `${id} : compatibilité`);
+    assert.equal(a.statutLocal, b.statutLocal, `${id} : statut local`);
+    assert.deepEqual(Object.keys(a.dimensions).sort(), Object.keys(b.dimensions).sort(),
+      `${id} : mêmes dimensions évaluées`);
+    if (a.dimensions.montaison) {
+      assert.equal(a.dimensions.montaison.declencheur, b.dimensions.montaison.declencheur);
+      assert.equal(a.dimensions.montaison.atteintSeuilEleve,
+        b.dimensions.montaison.atteintSeuilEleve, `${id} : risque de montaison`);
+    }
+  }
+});
+
+test("le poireau, absent de la FAO, n'emprunte rien à l'oignon", async () => {
+  const { readFileSync } = await import("node:fs");
+  const vmMod = await import("node:vm");
+  const ctx = { window: {} };
+  vmMod.createContext(ctx);
+  vmMod.runInContext(readFileSync(new URL("../agronomie.js", import.meta.url), "utf8"), ctx);
+  const P = ctx.window.PROFILS_AGROCLIMATIQUES;
+
+  // Le poireau est absent des tables 11, 12, 22 et 24 de la FAO. Ni p, ni
+  // profondeur d'enracinement, ni Ky, ni température de germination.
+  assert.equal(P.poireau.eau, undefined, "aucune valeur d'eau ne doit apparaître");
+  assert.equal(P.poireau.germination, undefined, "ni température de germination");
+  // Et surtout, rien ne doit venir de l'oignon.
+  assert.ok(P.oignon.eau.pFAO.valeur, "l'oignon, lui, a bien ses valeurs");
+  const lieu = profilClimatique(serie(), 45);
+  const r = compatibiliteActuelle(P.poireau, lieu);
+  assert.equal(r.dimensions.eau, undefined);
+  assert.equal(r.dimensionsDocumentees, 2, "seulement le cycle et la montaison");
+});

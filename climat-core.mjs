@@ -685,6 +685,39 @@ export function compatibiliteActuelle(culture, profilLieu, retours = []) {
     };
   }
 
+  /* --- montaison : la culture part à graine avant d'être récoltable.
+     Le lot 2 a montré que le DÉCLENCHEUR diffère radicalement d'une espèce à
+     l'autre, et qu'il ne suffit donc pas d'un seuil unique :
+       épinard  la longueur du jour déclenche, la chaleur accélère ;
+       poireau  le froid déclenche (vernalisation), la photopériode module ;
+       radis    les deux voies existent ;
+       betterave le froid déclenche, mais le stress hydrique aussi.
+     La résistance à la montaison est en outre un caractère VARIÉTAL dans les
+     trois cas où les sources se prononcent. On ne conclut donc jamais au
+     niveau de l'espèce : on expose le déclencheur documenté et la mesure
+     locale correspondante, et on laisse la dimension non évaluable. */
+  if (c.montaison && c.montaison.declencheur) {
+    const m = c.montaison;
+    const risque = {};
+    if (m.declencheur === "photoperiode" || m.declencheur === "mixte") {
+      if (Number.isFinite(profilLieu.heuresJourMax)) {
+        risque.heuresJourMax = profilLieu.heuresJourMax;
+        if (valeurUtilisable(m.heuresRisqueEleve)) {
+          risque.atteintSeuilEleve = profilLieu.heuresJourMax >= m.heuresRisqueEleve.valeur;
+        }
+      }
+    }
+    if (m.declencheur === "vernalisation" || m.declencheur === "mixte") {
+      if (Number.isFinite(profilLieu.minimumHivernal)) risque.minimumHivernal = profilLieu.minimumHivernal;
+    }
+    dimensions.montaison = {
+      etat: INCONNU, quantifiable: false, dependVariete: true,
+      declencheur: m.declencheur, ...risque,
+      bloquant: false, axe: "cycleAnnuel",
+      source: m.heuresRisqueEleve || m.vernalisation?.temperature || m.source || null,
+    };
+  }
+
   // --- eau : une réserve, jamais un verdict — presque tout se corrige en arrosant
   // Aucune source ne dit à partir de quel déficit en millimètres une culture
   // sensible décroche — et de toute façon presque tout se corrige en arrosant.
