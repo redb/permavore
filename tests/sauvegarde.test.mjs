@@ -4,6 +4,7 @@ import {
   SCHEMA_VERSION, FORMAT_VERSION, CLES_JARDIN, clesMetier,
   etatDepuisBrut, migrer, MIGRATIONS, construireExport, etatDepuisExport,
   validerExport, comparerJardins, entreeJournal, creerSyncProvider, ETATS_SYNC,
+  classerEchecEcriture, estSouveraine,
 } from "../sauvegarde-core.mjs";
 
 /* Un jardin volontairement complexe, celui du test de non-perte :
@@ -300,4 +301,77 @@ test("les photos de sachets du jardinier entrent dans l'export", () => {
   assert.equal(fichier.sachets[0].plantId, "tomate");
   // Et le cache climatique n'y entre jamais, même s'il traîne encore en local.
   assert.equal(JSON.stringify(fichier).includes("cacheClimat"), false);
+});
+
+/* ---------------------------------------------------------------------------
+   Échecs d'écriture : visibles sur une donnée du jardinier, silencieux sur un
+   cache. Le pire scénario serait de laisser croire que le jardin est sauvegardé.
+   --------------------------------------------------------------------------- */
+
+/** Reproduit l'erreur que lève un navigateur à court de place. */
+function quotaDepasse() {
+  const e = new Error("The quota has been exceeded.");
+  e.name = "QuotaExceededError";
+  return e;
+}
+
+test("un QuotaExceededError sur une donnée souveraine est signalé, jamais avalé", () => {
+  const r = classerEchecEcriture("permavore.instances.v1", quotaDepasse());
+  assert.equal(r.souveraine, true);
+  assert.equal(r.quota, true);
+  assert.equal(r.cause, "QuotaExceededError");
+  assert.equal(r.proposerExport, true, "l'export est la seule action qui règle le problème");
+});
+
+test("les photos de sachets sont traitées comme une donnée souveraine", () => {
+  const r = classerEchecEcriture("sachets", quotaDepasse());
+  assert.equal(r.souveraine, true);
+  assert.equal(r.proposerExport, true);
+});
+
+test("chaque donnée de classe A est reconnue comme souveraine", () => {
+  for (const cle of clesMetier()) {
+    assert.equal(estSouveraine(cle), true, `${cle} doit être souveraine`);
+  }
+  assert.equal(estSouveraine("sachets"), true);
+});
+
+test("un échec sur un cache reste non bloquant et n'alerte personne", () => {
+  for (const cache of ["permavore.climat.v2", "permavore.photos.v1", "permavore.lang"]) {
+    const r = classerEchecEcriture(cache, quotaDepasse());
+    assert.equal(r.souveraine, false, `${cache} ne doit pas alerter`);
+    assert.equal(r.proposerExport, false);
+  }
+});
+
+test("une panne d'écriture qui n'est pas un quota reste signalée", () => {
+  const autre = new Error("transaction aborted");
+  autre.name = "AbortError";
+  const r = classerEchecEcriture("permavore.occupations.v1", autre);
+  assert.equal(r.souveraine, true);
+  assert.equal(r.quota, false, "la cause est distinguée");
+  assert.equal(r.cause, "AbortError");
+  assert.equal(r.proposerExport, true);
+});
+
+test("l'écriture continue sur les autres clés après un échec partiel", () => {
+  // Un localStorage qui refuse une clé précise : les autres doivent passer,
+  // et l'échec doit être remonté plutôt que masqué.
+  const ecrites = {};
+  const faux = {
+    setItem(cle, valeur) {
+      if (cle === "permavore.occupations.v1") throw quotaDepasse();
+      ecrites[cle] = valeur;
+    },
+  };
+  const rates = [];
+  for (const [cle, valeur] of Object.entries({
+    "permavore.instances.v1": "[]", "permavore.occupations.v1": "[]", "permavore.zones.v1": "[]",
+  })) {
+    try { faux.setItem(cle, valeur); }
+    catch (e) { rates.push(classerEchecEcriture(cle, e)); }
+  }
+  assert.equal(Object.keys(ecrites).length, 2, "les deux autres clés sont écrites");
+  assert.equal(rates.length, 1);
+  assert.equal(rates[0].souveraine, true);
 });

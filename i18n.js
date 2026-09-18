@@ -365,6 +365,8 @@ const I18N = {
   "sauv.etat.vide": { fr: "Aucun jardin enregistré pour l'instant", en: "No garden saved yet" },
   "sauv.etat.fragile": { fr: "⚠️ Stockage durable indisponible : exporte ton jardin pour ne pas le perdre", en: "⚠️ Durable storage unavailable: export your garden so you don't lose it" },
   "sauv.etat.migrationEchouee": { fr: "⚠️ Mise à jour des données refusée : ton jardin précédent est conservé intact", en: "⚠️ Data upgrade refused: your previous garden is kept intact" },
+  "sauv.alerte.quota": { fr: "⚠️ Ton appareil n'a plus assez de place : la dernière modification de ton jardin n'a pas pu être enregistrée. Exporte-le maintenant pour ne rien perdre.", en: "⚠️ Your device is out of space: the last change to your garden could not be saved. Export it now so nothing is lost." },
+  "sauv.alerte.echec": { fr: "⚠️ Une modification de ton jardin n'a pas pu être enregistrée sur cet appareil. Exporte-le maintenant pour ne rien perdre.", en: "⚠️ A change to your garden could not be saved on this device. Export it now so nothing is lost." },
   "sauv.etat.inconnu": { fr: "Vérification du stockage…", en: "Checking storage…" },
   "hero.titre": { fr: "Que planter chez toi ?", en: "What can you plant at home?" },
   "hero.intro": { fr: "Pour les jardiniers d'hier et de demain", en: "For the gardeners of yesterday and tomorrow" },

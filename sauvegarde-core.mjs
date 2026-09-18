@@ -77,6 +77,42 @@ export function etatDepuisBrut(brut = {}) {
   return etat;
 }
 
+/* ---------- échecs d'écriture ------------------------------------------- */
+
+/*
+   Une écriture qui échoue sur une donnée du jardinier ne doit JAMAIS être
+   silencieuse : lui laisser croire que son jardin est sauvegardé alors que
+   l'écriture a échoué est la pire issue possible. À l'inverse, un cache qui
+   n'arrive pas à s'écrire n'intéresse personne.
+*/
+
+/** Une clé porte-t-elle une donnée souveraine (classe A) ? */
+export function estSouveraine(cle) {
+  if (cle === "sachets") return true;          // photos prises par le jardinier
+  return !!CLES_JARDIN[cle]?.metier;
+}
+
+/**
+ * Classe un échec d'écriture. `souveraine` décide si l'utilisateur doit être
+ * averti ; `cause` sert au journal technique, jamais à l'affichage brut.
+ */
+export function classerEchecEcriture(cle, erreur) {
+  const nom = erreur && (erreur.name || erreur.constructor?.name) || "Error";
+  const quota = nom === "QuotaExceededError"
+    || /quota/i.test(String(erreur && erreur.message))
+    || nom === "NS_ERROR_DOM_QUOTA_REACHED";
+  return {
+    cle,
+    souveraine: estSouveraine(cle),
+    quota,
+    cause: nom,
+    message: String((erreur && erreur.message) || "").slice(0, 200),
+    // Un quota dépassé se règle en exportant puis en faisant de la place ;
+    // une autre panne d'écriture se règle en exportant aussi, faute de mieux.
+    proposerExport: estSouveraine(cle),
+  };
+}
+
 /* ---------- migrations de schéma ---------------------------------------- */
 
 /*

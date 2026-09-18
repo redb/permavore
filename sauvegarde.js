@@ -137,11 +137,43 @@ export async function demarrerSauvegarde() {
   return etatStockage.resultat;
 }
 
+/* ---------- alerte visible en cas d'échec d'écriture ---------------------- */
+
+/*
+   Le cas le plus grave n'est pas de perdre une écriture : c'est de laisser le
+   jardinier croire que son jardin est enregistré alors qu'il ne l'est pas. Une
+   bannière s'affiche donc, et propose l'export tout de suite — c'est la seule
+   action qui règle réellement le problème.
+*/
+function alerterEchecStockage(detail) {
+  if (document.getElementById("sauv-alerte")) return;
+  const b = document.createElement("div");
+  b.id = "sauv-alerte";
+  b.className = "sauv-alerte";
+  b.setAttribute("role", "alert");
+  b.innerHTML = `
+    <span>${detail.quota ? tr("sauv.alerte.quota") : tr("sauv.alerte.echec")}</span>
+    <button type="button" class="btn-principal" id="sauv-alerte-exporter">${tr("sauv.exporter")}</button>
+    <button type="button" class="sauv-alerte-fermer" aria-label="${tr("enr.fermer")}">✕</button>`;
+  document.body.appendChild(b);
+  b.querySelector("#sauv-alerte-exporter").addEventListener("click", async () => {
+    try { await exporterJardin(); b.remove(); } catch { /* le message reste */ }
+  });
+  b.querySelector(".sauv-alerte-fermer").addEventListener("click", () => b.remove());
+}
+
+document.addEventListener("stockage:echec", (e) => {
+  const d = e.detail || {};
+  // Journal technique : la cause exacte, pour pouvoir diagnostiquer plus tard.
+  console.warn("[permavore] écriture refusée", { cle: d.cle, cause: d.cause, quota: d.quota });
+  if (d.souveraine) alerterEchecStockage(d);
+});
+
 window.Sauvegarde = {
   exporter: exporterJardin,
   restaurer: restaurerJardin,
   etat: () => etatStockage.resultat,
-  messageEtat,
+  messageEtat, alerterEchecStockage,
   sauvegardes,
   restaurerSauvegarde,
   FORMAT_VERSION,

@@ -21,6 +21,7 @@
 
 import {
   SCHEMA_VERSION, clesMetier, clesObsoletes, etatDepuisBrut, migrer, comparerJardins,
+  classerEchecEcriture,
 } from "./sauvegarde-core.mjs";
 
 const NOM_BASE = "permavore-jardin";
@@ -37,6 +38,26 @@ const MAGASIN_SAUVEGARDES = "sauvegardes";  // filets avant opération risquée
 const MAGASIN_CLIMAT = "climat";
 
 let basePromesse = null;
+
+// Échecs d'écriture rencontrés, pour que l'interface puisse en rendre compte.
+const echecsEcriture = [];
+
+/**
+ * Signale un échec d'écriture. Sur une donnée souveraine, l'événement est émis
+ * pour que l'interface avertisse et propose l'export ; sur un cache, on se
+ * contente de le noter.
+ */
+function signalerEchec(cle, erreur) {
+  const e = classerEchecEcriture(cle, erreur);
+  echecsEcriture.push({ ...e, quand: new Date().toISOString() });
+  if (echecsEcriture.length > 50) echecsEcriture.shift();
+  if (e.souveraine && typeof document !== "undefined") {
+    document.dispatchEvent(new CustomEvent("stockage:echec", { detail: e }));
+  }
+  return e;
+}
+
+export const echecs = () => [...echecsEcriture];
 
 function ouvrir() {
   if (basePromesse) return basePromesse;
@@ -111,6 +132,7 @@ export async function lireEtat() {
 
 export async function ecrireEtat(etat) {
   const db = await ouvrir();
+  const cles = Object.keys(etat.donnees || {});
   await new Promise((ok, ko) => {
     const tx = db.transaction([MAGASIN_ETAT, MAGASIN_META], "readwrite");
     const store = tx.objectStore(MAGASIN_ETAT);
@@ -118,7 +140,13 @@ export async function ecrireEtat(etat) {
     tx.objectStore(MAGASIN_META).put(
       { schemaVersion: etat.schemaVersion ?? SCHEMA_VERSION, maj: new Date().toISOString() },
       "schema");
-    tx.oncomplete = ok; tx.onerror = () => ko(tx.error);
+    tx.oncomplete = ok;
+    tx.onerror = () => {
+      // Une écriture durable qui échoue concerne des données souveraines :
+      // l'utilisateur doit le savoir, et pouvoir exporter tout de suite.
+      signalerEchec(cles.find(c => c !== "permavore.lang") || "instances", tx.error || new Error("ecriture_durable"));
+      ko(tx.error);
+    };
   });
 }
 
@@ -261,7 +289,10 @@ export async function ecrireSachets(liste) {
       tx.oncomplete = () => ok(n);
       tx.onerror = () => ko(tx.error);
     });
-  } catch { return 0; }
+  } catch (e) {
+    signalerEchec("sachets", e);   // photos du jardinier : jamais en silence
+    return 0;
+  }
 }
 
 export async function effacerSachetsPourTest() {
@@ -287,11 +318,17 @@ export function lireLocalStorage() {
 }
 
 export function appliquerVersLocalStorage(etat) {
+  const rates = [];
   for (const [cle, valeur] of Object.entries(etat.donnees || {})) {
     try {
       localStorage.setItem(cle, typeof valeur === "string" ? valeur : JSON.stringify(valeur));
-    } catch { /* quota : on continue, IndexedDB reste la copie durable */ }
+    } catch (e) {
+      // On continue les autres clés — sauver ce qui peut l'être — mais on ne
+      // fait jamais comme si de rien n'était.
+      rates.push(signalerEchec(cle, e));
+    }
   }
+  return rates;
 }
 
 /* ---------- démarrage ----------------------------------------------------- */
@@ -353,7 +390,10 @@ export async function synchroniserCopieDurable() {
     if (!Object.keys(local.donnees).length) return false;
     await ecrireEtat(local);
     return true;
-  } catch { return false; }
+  } catch {
+    // ecrireEtat a déjà signalé l'échec ; on ne prétend pas que c'est bon.
+    return false;
+  }
 }
 
 /**
