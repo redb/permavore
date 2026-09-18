@@ -460,3 +460,34 @@ test("le reçu n'entre jamais dans l'export : c'est un message, pas une donnée"
   assert.equal(CLES_JARDIN["permavore.restauration.v1"].metier, false);
   assert.equal(clesMetier().includes("permavore.restauration.v1"), false);
 });
+
+test("une Expérience Lune survit à l'export et à la restauration", () => {
+  // Les observations du jardinier sont des données souveraines : une
+  // expérience en cours ne doit pas disparaître parce qu'il change de
+  // téléphone au milieu du protocole.
+  const brut = {
+    ...jardinComplexe(),
+    "permavore.experiences.v1": JSON.stringify([{
+      id: "exp1", cultureId: "radis", versionProtocole: "lune-radis-1",
+      statut: "active", lieu: { lat: 45.87, lng: 5.94 },
+      lots: {
+        A: { condition: "lune_croissante_pleine", grainesSemees: 20,
+             semeLe: "2026-09-21T09:00:00.000Z", plantsLeves: 17,
+             releveLunaire: { ageJours: 14.2, fractionEclairee: 0.98, altitudeDeg: 31.4 } },
+        B: { condition: "lune_decroissante_nouvelle", grainesSemees: 20, semeLe: null },
+      },
+    }]),
+  };
+  const avant = etatDepuisBrut(brut);
+  const fichier = JSON.parse(JSON.stringify(construireExport(avant)));
+  assert.equal(fichier.experiences.length, 1);
+
+  const apres = etatDepuisExport(fichier);
+  assert.equal(comparerJardins(avant, apres).identique, true);
+  const exp = apres.donnees["permavore.experiences.v1"][0];
+  assert.equal(exp.statut, "active");
+  assert.equal(exp.lots.A.plantsLeves, 17);
+  assert.equal(exp.lots.A.releveLunaire.fractionEclairee, 0.98,
+    "le relevé astronomique figé est conservé au centième près");
+  assert.equal(exp.lots.B.semeLe, null, "le second semis reste à faire, et on le sait");
+});

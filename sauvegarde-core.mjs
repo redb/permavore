@@ -35,6 +35,9 @@ export const CLES_JARDIN = {
   "permavore.dates.v1":        { nom: "dates",       metier: true,  type: "object" },
   "permavore.adoptees":        { nom: "adoptees",    metier: true,  type: "array" },
   "permavore.seedRequests.v1": { nom: "demandesGraines", metier: true, type: "array" },
+  // Expériences Lune : ce sont des observations du jardinier, donc des données
+  // souveraines. Elles s'exportent et se restaurent comme le reste.
+  "permavore.experiences.v1": { nom: "experiences", metier: true, type: "array" },
   // Confort local : reconstructible, donc jamais exporté ni restauré.
   "permavore.lang":         { nom: "langue",       metier: false },
   "permavore.photos.v1":    { nom: "cachePhotos",  metier: false },
@@ -196,6 +199,7 @@ export function construireExport(etat, meta = {}) {
     instances: bloc("permavore.instances.v1"),
     zones: bloc("permavore.zones.v1"),
     occupations: bloc("permavore.occupations.v1"),
+    experiences: bloc("permavore.experiences.v1"),
     dates: bloc("permavore.dates.v1"),
     adoptees: bloc("permavore.adoptees"),
     ressources: bloc("permavore.ressources"),
@@ -216,6 +220,7 @@ export function etatDepuisExport(fichier) {
   poser("permavore.instances.v1", fichier?.instances);
   poser("permavore.zones.v1", fichier?.zones);
   poser("permavore.occupations.v1", fichier?.occupations);
+  poser("permavore.experiences.v1", fichier?.experiences);
   poser("permavore.dates.v1", fichier?.dates);
   poser("permavore.adoptees", fichier?.adoptees);
   poser("permavore.ressources", fichier?.ressources);
@@ -252,6 +257,7 @@ export function validerExport(fichier) {
   estTableau(fichier.instances, "instances");
   estTableau(fichier.zones, "zones");
   estTableau(fichier.occupations, "occupations");
+  estTableau(fichier.experiences, "experiences");
   estTableau(fichier.cultures, "cultures");
 
   if (Array.isArray(fichier.instances)) {
@@ -270,6 +276,7 @@ export function validerExport(fichier) {
     culturesDistinctes: cultures.size,
     zones: tableau(fichier.zones).length,
     occupations: tableau(fichier.occupations).length,
+    experiences: tableau(fichier.experiences).length,
     cultures: tableau(fichier.cultures).length,
     photos: tableau(fichier.sachets).length,
     ressources: fichier.ressources ? "présentes" : "absentes",

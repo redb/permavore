@@ -76,6 +76,135 @@ function ageLune(date) {
   return { fraction: frac, age: frac * SYNODIQUE };
 }
 
+/* =========================================================================
+   Position apparente de la Lune pour un observateur, et exposition nocturne.
+
+   Ces calculs servent l'« Expérience Lune » : pour comparer honnêtement deux
+   semis, il faut enregistrer ce que la Lune faisait RÉELLEMENT au-dessus du
+   jardin — pas seulement une étiquette « pleine lune ». Une pleine lune qui
+   reste sous l'horizon n'éclaire rien.
+
+   Tout est calculé en local, sans aucun appel réseau.
+   ========================================================================= */
+
+/** Temps sidéral apparent à Greenwich, en degrés. */
+function tempsSideralGreenwich(date) {
+  const jj = jourJulien(date);
+  const T = (jj - 2451545) / 36525;
+  const theta = 280.46061837 + 360.98564736629 * (jj - 2451545)
+    + 0.000387933 * T * T - (T * T * T) / 38710000;
+  return ((theta % 360) + 360) % 360;
+}
+
+/** Ascension droite et déclinaison de la Lune, en degrés. */
+function equatorialesLune(date) {
+  const { lon, lat } = positionLune(date);
+  const eps = 23.4393 * RAD;
+  const l = lon * RAD, b = lat * RAD;
+  const ad = Math.atan2(Math.sin(l) * Math.cos(eps) - Math.tan(b) * Math.sin(eps), Math.cos(l));
+  const dec = Math.asin(Math.sin(b) * Math.cos(eps) + Math.cos(b) * Math.sin(eps) * Math.sin(l));
+  return { ascensionDroite: (((ad / RAD) % 360) + 360) % 360, declinaison: dec / RAD };
+}
+
+/** Hauteur de la Lune au-dessus de l'horizon, en degrés (négative = couchée). */
+function altitudeLune(date, latitude, longitude) {
+  const { ascensionDroite, declinaison } = equatorialesLune(date);
+  const angleHoraire = (tempsSideralGreenwich(date) + longitude - ascensionDroite) * RAD;
+  const phi = latitude * RAD, dec = declinaison * RAD;
+  const sinAlt = Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(angleHoraire);
+  return Math.asin(Math.max(-1, Math.min(1, sinAlt))) / RAD;
+}
+
+/** Hauteur du Soleil, pour distinguer la nuit du jour. */
+function altitudeSoleil(date, latitude, longitude) {
+  const jj = jourJulien(date);
+  const n = jj - 2451545;
+  const L = ((280.46 + 0.9856474 * n) % 360 + 360) % 360;
+  const g = (((357.528 + 0.9856003 * n) % 360 + 360) % 360) * RAD;
+  const lambda = (L + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * RAD;
+  const eps = 23.4393 * RAD;
+  const ad = Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda));
+  const dec = Math.asin(Math.sin(eps) * Math.sin(lambda));
+  const angleHoraire = (tempsSideralGreenwich(date) + longitude - ((ad / RAD) % 360 + 360) % 360) * RAD;
+  const phi = latitude * RAD;
+  const sinAlt = Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(angleHoraire);
+  return Math.asin(Math.max(-1, Math.min(1, sinAlt))) / RAD;
+}
+
+/**
+ * Fraction du disque lunaire éclairée, de 0 (nouvelle lune) à 1 (pleine lune).
+ * Dérivée de l'âge de la lunaison : suffisante pour caractériser un semis, et
+ * cohérente avec le reste du module.
+ */
+function fractionEclairee(date) {
+  const { age } = ageLune(date);
+  return (1 - Math.cos((2 * Math.PI * age) / SYNODIQUE)) / 2;
+}
+
+/**
+ * Lever et coucher de la Lune autour d'une date, par balayage au pas de dix
+ * minutes. Renvoie null quand l'astre ne franchit pas l'horizon ce jour-là —
+ * cela arrive réellement aux hautes latitudes, et on ne l'invente pas.
+ */
+function leverCoucherLune(date, latitude, longitude) {
+  const debut = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const pas = 10 * 60000;
+  let lever = null, coucher = null;
+  let precedente = altitudeLune(debut, latitude, longitude);
+  for (let t = pas; t <= 86400000; t += pas) {
+    const instant = new Date(debut.getTime() + t);
+    const courante = altitudeLune(instant, latitude, longitude);
+    if (precedente < 0 && courante >= 0 && !lever) lever = instant;
+    if (precedente >= 0 && courante < 0 && !coucher) coucher = instant;
+    precedente = courante;
+  }
+  return { lever, coucher };
+}
+
+/**
+ * Heures pendant lesquelles la Lune est au-dessus de l'horizon ALORS QUE le
+ * Soleil est couché. C'est la seule durée qui a un sens pour une hypothèse
+ * d'influence lumineuse : une pleine lune en plein jour n'éclaire pas un semis.
+ */
+function expositionNocturne(date, latitude, longitude) {
+  const debut = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const pas = 10 * 60000;
+  let minutes = 0;
+  for (let t = 0; t < 86400000; t += pas) {
+    const instant = new Date(debut.getTime() + t);
+    if (altitudeLune(instant, latitude, longitude) > 0
+      && altitudeSoleil(instant, latitude, longitude) < -6) {   // crépuscule civil
+      minutes += 10;
+    }
+  }
+  return Math.round((minutes / 60) * 10) / 10;
+}
+
+/**
+ * Photographie astronomique complète d'un instant et d'un lieu. C'est ce qu'on
+ * fige au moment d'un semis : des mesures, pas une catégorie. Une analyse
+ * ultérieure pourra toujours en tirer des catégories ; l'inverse est impossible.
+ */
+function releveLunaire(date, latitude, longitude) {
+  const { age } = ageLune(date);
+  const { lever, coucher } = leverCoucherLune(date, latitude, longitude);
+  return {
+    quand: date.toISOString(),
+    latitude, longitude,
+    ageJours: Math.round(age * 1000) / 1000,
+    fractionEclairee: Math.round(fractionEclairee(date) * 1000) / 1000,
+    altitudeDeg: Math.round(altitudeLune(date, latitude, longitude) * 10) / 10,
+    declinaisonDeg: Math.round(declinaisonLune(date) * 10) / 10,
+    lever: lever ? lever.toISOString() : null,
+    coucher: coucher ? coucher.toISOString() : null,
+    expositionNocturneHeures: expositionNocturne(date, latitude, longitude),
+    cycleSynodiqueJours: SYNODIQUE,
+    // La couverture nuageuse déciderait de l'exposition RÉELLE, mais elle
+    // demanderait un appel réseau par date : elle reste à renseigner plus tard.
+    couvertureNuageusePct: null,
+  };
+}
+
 const PHASES = [
   { max: 1.0,  nom: bi("Nouvelle lune", "New moon"),               emoji: "🌑" },
   { max: 6.4,  nom: bi("Premier croissant", "Waxing crescent"),     emoji: "🌒" },
@@ -165,4 +294,13 @@ function prochainJour(type, depuis = new Date(), maxJours = 30) {
 function typeLunairePlante(plante) {
   if (plante.typeLunaire) return plante.typeLunaire;
   return "feuille"; // repli neutre si la donnée manque
+}
+
+if (typeof window !== "undefined") {
+  window.Lune = {
+    infosLune, prochainJour, typeLunairePlante,
+    ageLune, fractionEclairee, altitudeLune, altitudeSoleil,
+    leverCoucherLune, expositionNocturne, releveLunaire,
+    SYNODIQUE,
+  };
 }
