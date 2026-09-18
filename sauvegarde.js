@@ -327,7 +327,8 @@ function majPanneauSecours() {
   hote.innerHTML = `
     <p class="sauv-etat sauv-${ton}">${tr(LIBELLE_SECOURS[e.statut] || "secours.etat.nonConfiguree")}${quand}</p>
     ${e.nom ? `<p class="sauv-explication">${tr("secours.fichier", { nom: echapper(e.nom) })}</p>` : ""}
-    <p class="sauv-explication">${c.autosauvegarde ? tr("secours.auto") : tr("secours.manuel")}</p>
+    <p class="sauv-explication">${c.autosauvegarde ? tr("secours.auto")
+      : (c.partageNatif ? tr("secours.partage") : tr("secours.manuel"))}</p>
     <div class="sauv-actions">${actions}</div>`;
 
   hote.querySelector("#secours-creer")?.addEventListener("click", async () => {

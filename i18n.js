@@ -374,6 +374,7 @@ const I18N = {
   "secours.le": { fr: "le {date}", en: "on {date}" },
   "secours.fichier": { fr: "Fichier : {nom}", en: "File: {nom}" },
   "secours.auto": { fr: "Une fois créée, elle se met à jour toute seule après chaque changement de ton jardin.", en: "Once created, it updates itself after every change to your garden." },
+  "secours.partage": { fr: "Ce navigateur ne réécrit pas un fichier tout seul. Ton jardin reste enregistré sur cet appareil, et tu peux en envoyer une copie dans Fichiers ou iCloud Drive quand tu veux.", en: "This browser cannot rewrite a file on its own. Your garden stays saved on this device, and you can send a copy to Files or iCloud Drive whenever you like." },
   "secours.manuel": { fr: "Ce navigateur ne permet pas de réécrire un fichier automatiquement : ton jardin reste sauvegardé sur cet appareil, et tu peux en créer une copie quand tu veux.", en: "This browser cannot rewrite a file automatically: your garden stays saved on this device, and you can make a copy whenever you like." },
   "secours.creer": { fr: "Créer une copie de secours", en: "Create a backup file" },
   "secours.mettreAJour": { fr: "Mettre à jour maintenant", en: "Update now" },

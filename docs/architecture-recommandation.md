@@ -235,3 +235,36 @@ saisie à la main dans `PROJECTIONS_CLIMAT` reste prioritaire sur ce calcul.
 **Prochaine brique, la plus utile** : les seuils agronomiques par culture (jours
 chauds nécessaires, durée de saison sans gel, besoins en froid). Sans eux, aucune
 projection ne peut être traduite en « favorable » pour une culture donnée.
+
+## 12. Copie de secours : ce que permettent réellement les navigateurs
+
+Mesuré le 2026-09-18 avec `capacites.html`, sur les navigateurs réellement
+installés — pas depuis une table de compatibilité mémorisée.
+
+| Capacité | Safari 27 (macOS 26.7) | Chromium 152 (panneau intégré) |
+|---|---|---|
+| `showSaveFilePicker` | **non** | oui, mais **échoue à l'usage** |
+| `createWritable` | oui (sans poignée à écrire) | oui |
+| `queryPermission` / `requestPermission` | **non** | oui |
+| `navigator.share` avec fichiers | **oui** | non |
+| Téléchargement | oui | oui |
+| **Autosauvegarde fichier** | **impossible** | annoncée possible, mais inutilisable ici |
+
+Deux enseignements, tous deux contre-intuitifs :
+
+1. **Safari a le partage natif mais pas le sélecteur de fichier.** C'est
+   l'inverse de Chromium. La branche utile sur Safari — et donc sur iPhone —
+   est la feuille de partage vers Fichiers ou iCloud Drive, pas la réécriture
+   automatique. L'interface le dit désormais explicitement plutôt que
+   d'afficher un message générique d'indisponibilité.
+
+2. **La présence d'une API ne prouve pas qu'elle fonctionne.** Dans le panneau
+   intégré de l'application Claude, `showSaveFilePicker` existe et se termine
+   immédiatement par `AbortError`. `capacites()` ne peut pas le détecter :
+   seul un essai réel le révèle. D'où le bouton d'essai de `capacites.html`,
+   et d'où le fait que l'état ne passe jamais à « à jour » sans écriture
+   réellement aboutie.
+
+Non mesuré : Safari iOS et la PWA iOS. La page de diagnostic est en ligne
+(`/capacites`) pour que la question se règle en dix secondes sur un vrai
+téléphone, plutôt que par supposition.
