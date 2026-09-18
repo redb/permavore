@@ -2168,6 +2168,7 @@ function traduireStatique() {
   set("#form-consigne", t("hero.consigne"));
   set("#entree-reprise-texte", t("accueil.dejaUnJardin"));
   set("#btn-restaurer-accueil", t("accueil.restaurer"));
+  set("#btn-experience-lune", t("lune.bouton"));
   set("#footer-marque", t("footer.marque"));
   set("#footer-note", t("footer.note"));
   set("#footer-credit", t("footer.credit"));
