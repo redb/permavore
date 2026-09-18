@@ -4,7 +4,7 @@ import {
   SCHEMA_VERSION, FORMAT_VERSION, CLES_JARDIN, clesMetier,
   etatDepuisBrut, migrer, MIGRATIONS, construireExport, etatDepuisExport,
   validerExport, comparerJardins, entreeJournal, creerSyncProvider, ETATS_SYNC,
-  classerEchecEcriture, estSouveraine,
+  classerEchecEcriture, estSouveraine, recuRestauration,
 } from "../sauvegarde-core.mjs";
 
 /* Un jardin volontairement complexe, celui du test de non-perte :
@@ -435,4 +435,28 @@ test("restaurer par-dessus un jardin existant se fait après sauvegarde de sécu
   assert.notDeepEqual(comparerJardins(existant, nouveau).differences, []);
   // Retour arrière : le filet redonne exactement le jardin de départ.
   assert.equal(comparerJardins(existant, filet).identique, true);
+});
+
+test("le reçu de restauration atteste de ce qui est là, pas de ce qu'on espérait", () => {
+  // Les nombres sont relus dans l'état écrit : si la restauration avait perdu
+  // quelque chose, le reçu le dirait au lieu de recopier le fichier.
+  const etatEcrit = etatDepuisBrut(jardinComplexe());
+  const recu = recuRestauration(etatEcrit, { photos: 2, sauvegardeDu: "2026-09-18T04:00:00.000Z" });
+  assert.equal(recu.lieu, "Rumilly");
+  assert.equal(recu.instances, 3);
+  assert.equal(recu.zones, 1);
+  assert.equal(recu.photos, 2);
+  assert.equal(recu.verifie, true);
+  assert.equal(recu.sauvegardeDu, "2026-09-18T04:00:00.000Z");
+  assert.ok(Date.parse(recu.quand) > 0);
+
+  // Un état vide donne un reçu honnête : des zéros, pas une promesse.
+  const vide = recuRestauration({ donnees: {} });
+  assert.equal(vide.instances, 0);
+  assert.equal(vide.lieu, null);
+});
+
+test("le reçu n'entre jamais dans l'export : c'est un message, pas une donnée", () => {
+  assert.equal(CLES_JARDIN["permavore.restauration.v1"].metier, false);
+  assert.equal(clesMetier().includes("permavore.restauration.v1"), false);
 });

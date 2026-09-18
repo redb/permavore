@@ -10,7 +10,7 @@
 
 import {
   construireExport, etatDepuisExport, validerExport, comparerJardins, FORMAT_VERSION,
-  clesMetier,
+  clesMetier, recuRestauration,
 } from "./sauvegarde-core.mjs";
 import * as Secours from "./fichier-secours.js";
 import {
@@ -20,6 +20,7 @@ import {
 } from "./stockage.js";
 
 const etatStockage = { pret: false, resultat: null };
+const CLE_RECU = "permavore.restauration.v1";
 
 /* ---------- indicateur d'état -------------------------------------------- */
 
@@ -111,8 +112,18 @@ export async function restaurerJardin(fichier, confirmer) {
     return { ok: false, etape: "integrite", differences: controle.differences };
   }
 
+  // Reçu écrit AVANT le rechargement : c'est ce qui permettra de confirmer au
+  // jardinier, une fois la page revenue, que son jardin est bien là. Les
+  // nombres viennent de l'état relu, pas du fichier.
+  const recu = recuRestauration(relu, {
+    verifie: true,
+    photos: Array.isArray(fichier.sachets) ? fichier.sachets.length : 0,
+    sauvegardeDu: validation.resume?.exportedAt || null,
+  });
+  try { localStorage.setItem(CLE_RECU, JSON.stringify(recu)); } catch { /* sans gravité */ }
+
   return { ok: true, resume: validation.resume, reserves: validation.reserves,
-    sauvegardePrecedente: idFilet };
+    sauvegardePrecedente: idFilet, recu };
 }
 
 async function rembobiner(avant, idFilet) {
@@ -501,17 +512,65 @@ function brancherRepriseAccueil() {
   bouton.addEventListener("click", () => reprendreJardinDepuisFichier(champ));
 }
 
+/* ---------- confirmation visible après restauration ------------------------ */
+
+/*
+   Sans cela, le jardinier rechargeait sur un jardin et devait deviner si c'était
+   bien le sien et si tout était revenu. Le bandeau dit ce qui a été restauré,
+   d'après l'état réellement écrit, et disparaît quand il l'a lu.
+*/
+function afficherRecuRestauration() {
+  let recu = null;
+  try { recu = JSON.parse(localStorage.getItem(CLE_RECU) || "null"); } catch { recu = null; }
+  if (!recu) return;
+  if (document.getElementById("recu-restauration")) return;
+
+  const morceaux = [];
+  if (recu.lieu) morceaux.push(echapper(recu.lieu));
+  if (recu.instances) morceaux.push(tr("reprise.cultures", { n: recu.instances, d: recu.instances }));
+  if (recu.zones) morceaux.push(tr("reprise.zones", { n: recu.zones }));
+  if (recu.occupations) morceaux.push(tr("reprise.occupations", { n: recu.occupations }));
+  if (recu.photos) morceaux.push(tr("reprise.photos", { n: recu.photos }));
+  const date = recu.sauvegardeDu ? new Date(recu.sauvegardeDu) : null;
+  const quand = date && !Number.isNaN(date.getTime())
+    ? " · " + tr("reprise.date", { date: date.toLocaleDateString(
+        document.documentElement.lang === "en" ? "en" : "fr",
+        { day: "numeric", month: "long", year: "numeric" }) })
+    : "";
+
+  const b = document.createElement("div");
+  b.id = "recu-restauration";
+  b.className = "recu-restauration";
+  b.setAttribute("role", "status");
+  b.innerHTML = `
+    <span><strong>${tr("recu.titre")}</strong> ${morceaux.join(" · ")}${quand}
+      ${recu.verifie ? `<em>${tr("recu.verifie")}</em>` : ""}</span>
+    <button type="button" class="recu-fermer" aria-label="${tr("enr.fermer")}">✕</button>`;
+  document.body.prepend(b);
+  const fermer = () => {
+    b.remove();
+    try { localStorage.removeItem(CLE_RECU); } catch { /* sans gravité */ }
+  };
+  b.querySelector(".recu-fermer").addEventListener("click", fermer);
+  // Il disparaît de lui-même au bout d'un moment : c'est une confirmation,
+  // pas une alerte — mais assez longtemps pour être lu sans se presser.
+  setTimeout(fermer, 20000);
+}
+
 window.Sauvegarde.ouvrirPanneau = ouvrirPanneauSauvegarde;
 window.Sauvegarde.reprendre = reprendreJardinDepuisFichier;
 window.Sauvegarde.jardinPresent = jardinPresent;
+window.Sauvegarde.recu = afficherRecuRestauration;
 window.Sauvegarde.secours = Secours;
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-sauvegarde")?.addEventListener("click", ouvrirPanneauSauvegarde);
   brancherRepriseAccueil();
+  afficherRecuRestauration();
   demarrerSauvegarde();
 });
 if (document.readyState !== "loading") {
   document.getElementById("btn-sauvegarde")?.addEventListener("click", ouvrirPanneauSauvegarde);
   brancherRepriseAccueil();
+  afficherRecuRestauration();
   demarrerSauvegarde();
 }

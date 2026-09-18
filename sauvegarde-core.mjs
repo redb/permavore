@@ -42,6 +42,9 @@ export const CLES_JARDIN = {
   // « climat »). La clé reste listée pour être purgée, jamais exportée.
   "permavore.climat.v2":    { nom: "cacheClimatObsolete", metier: false, obsolete: true },
   "permavore.enraciner.vu": { nom: "aideVue",      metier: false },
+  // Reçu de la dernière restauration : sert à confirmer au jardinier, APRÈS le
+  // rechargement, que son jardin est bien revenu. Jetable, jamais exporté.
+  "permavore.restauration.v1": { nom: "recuRestauration", metier: false },
 };
 
 export const clesMetier = () =>
@@ -276,6 +279,29 @@ export function validerExport(fichier) {
     formatVersion: fichier.formatVersion ?? null,
   };
   return { valide: erreurs.length === 0, erreurs, reserves, resume };
+}
+
+/* ---------- reçu de restauration ----------------------------------------- */
+
+/**
+ * Ce qu'on affiche au jardinier après une restauration. Les nombres sont RELUS
+ * dans l'état effectivement écrit, pas recopiés du fichier : le reçu doit
+ * attester de ce qui est là, pas de ce qu'on espérait y mettre.
+ */
+export function recuRestauration(etatRestaure, options = {}) {
+  const d = etatRestaure?.donnees || {};
+  const liste = (cle) => (Array.isArray(d[cle]) ? d[cle] : []);
+  const prefs = d["permavore.jardin.v1"] || null;
+  return {
+    quand: new Date().toISOString(),
+    verifie: options.verifie !== false,
+    lieu: (prefs && typeof prefs.ville === "string" && prefs.ville.trim()) || null,
+    instances: liste("permavore.instances.v1").length,
+    zones: liste("permavore.zones.v1").length,
+    occupations: liste("permavore.occupations.v1").length,
+    photos: Number.isFinite(options.photos) ? options.photos : 0,
+    sauvegardeDu: options.sauvegardeDu || null,
+  };
 }
 
 /* ---------- comparaison avant / après ----------------------------------- */

@@ -985,3 +985,9 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .reprise-reserve{margin:.5rem 0 0;font-size:.88rem;background:rgba(201,154,59,.15);
   border-radius:8px;padding:.45rem .6rem;line-height:1.45}
 .reprise-invalide{margin:.4rem 0;font-size:.95rem;color:#a4452c;line-height:1.45}
+.recu-restauration{position:sticky;top:0;z-index:75;display:flex;align-items:center;
+  gap:.6rem;padding:.6rem 1rem;background:#e4f3e6;color:#1f5c2b;
+  border-bottom:2px solid #4a8c58;font-size:.92rem;line-height:1.45}
+.recu-restauration span{flex:1}
+.recu-restauration em{display:block;font-style:normal;opacity:.8;font-size:.86rem}
+.recu-fermer{border:none;background:none;cursor:pointer;opacity:.6;font-size:1rem}

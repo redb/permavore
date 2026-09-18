@@ -381,6 +381,8 @@ const I18N = {
   "secours.oublier": { fr: "Oublier ce fichier", en: "Forget this file" },
   "secours.partager": { fr: "Envoyer vers Fichiers", en: "Send to Files" },
   "secours.echecPartage": { fr: "Le partage n'a pas abouti. Télécharge la copie à la place.", en: "Sharing did not complete. Download the copy instead." },
+  "recu.titre": { fr: "✓ Jardin restauré", en: "✓ Garden restored" },
+  "recu.verifie": { fr: "Vérifié : tout est revenu.", en: "Verified: everything came back." },
   "reprise.titre": { fr: "Jardin trouvé", en: "Garden found" },
   "reprise.trouve": { fr: "Voici ce que contient ce fichier :", en: "Here is what this file holds:" },
   "reprise.surface": { fr: "{n} m² cultivables", en: "{n} m² of growing space" },
