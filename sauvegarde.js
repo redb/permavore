@@ -316,7 +316,12 @@ function majPanneauSecours() {
 
   let actions = "";
   if (e.statut === "nonSupportee") {
-    actions = `<button type="button" class="enr-chip" id="secours-telecharger">${tr("secours.telecharger")}</button>`;
+    // Deux actions distinctes plutôt qu'une heuristique de plateforme : sur
+    // macOS la feuille de partage ne propose pas d'enregistrer un fichier,
+    // sur iOS elle mène à Fichiers et iCloud Drive. Le jardinier choisit.
+    actions = `<button type="button" class="btn-principal" id="secours-telecharger">${tr("secours.telecharger")}</button>`
+      + (c.partageNatif
+        ? `<button type="button" class="enr-chip" id="secours-partager">${tr("secours.partager")}</button>` : "");
   } else if (e.statut === "nonConfiguree") {
     actions = `<button type="button" class="enr-chip" id="secours-creer">${tr("secours.creer")}</button>`;
   } else {
@@ -349,23 +354,164 @@ function majPanneauSecours() {
   hote.querySelector("#secours-oublier")?.addEventListener("click", async () => {
     await Secours.oublier();
   });
-  hote.querySelector("#secours-telecharger")?.addEventListener("click", async () => {
-    // Plateformes sans réécriture : partage natif si disponible, sinon
-    // téléchargement. Les deux laissent le fichier à l'utilisateur.
+  hote.querySelector("#secours-telecharger")?.addEventListener("click", () => exporterJardin());
+  hote.querySelector("#secours-partager")?.addEventListener("click", async () => {
     const contenu = await contenuSauvegarde();
-    const nom = Secours.nomPropose(lieuDuJardin());
-    const partage = await Secours.partager(contenu, nom);
-    if (!partage.ok) await exporterJardin();
+    const partage = await Secours.partager(contenu, Secours.nomPropose(lieuDuJardin()));
+    const m = document.getElementById("sauv-message");
+    if (m && !partage.ok && partage.raison !== "annule") m.textContent = tr("secours.echecPartage");
   });
 }
 
+/* ---------- reprise d'un jardin depuis l'accueil --------------------------- */
+
+/*
+   Un jardinier qui change de téléphone, réinstalle l'application ou perd son
+   stockage doit retrouver son jardin AVANT toute configuration : sans créer un
+   jardin neuf, sans ressaisir sa commune, sans aller fouiller dans les
+   réglages. D'où cette reprise sur le premier écran.
+
+   Elle passe par un `<input type="file">` ordinaire — le seul mécanisme
+   disponible partout, Safari iOS compris, qui ouvre Fichiers, iCloud Drive ou
+   « Sur mon iPhone ». Elle ne dépend EN RIEN de la copie de secours
+   automatique : ce sont deux capacités indépendantes.
+
+   Et elle emprunte exactement le même moteur de restauration que les réglages :
+   validation, aperçu, sauvegarde de sécurité, contrôle d'intégrité, retour
+   arrière. Pas de seconde implémentation.
+*/
+
+/** Y a-t-il déjà un jardin sur cet appareil ? */
+function jardinPresent() {
+  const etat = lireLocalStorage();
+  const instances = etat.donnees["permavore.instances.v1"];
+  const prefs = etat.donnees["permavore.jardin.v1"];
+  return (Array.isArray(instances) && instances.length > 0)
+    || !!(prefs && typeof prefs === "object" && prefs.ville);
+}
+
+/** Aperçu : uniquement ce que le fichier contient vraiment. */
+function apercuHTML(resume, reserves) {
+  const lignes = [];
+  if (resume.lieu) lignes.push(`<strong>${echapper(resume.lieu)}</strong>`);
+  if (Number.isFinite(resume.surface)) lignes.push(tr("reprise.surface", { n: resume.surface }));
+  if (resume.instances) lignes.push(tr("reprise.cultures", { n: resume.instances, d: resume.culturesDistinctes }));
+  if (resume.zones) lignes.push(tr("reprise.zones", { n: resume.zones }));
+  if (resume.occupations) lignes.push(tr("reprise.occupations", { n: resume.occupations }));
+  if (resume.exportedAt) {
+    const d = new Date(resume.exportedAt);
+    lignes.push(tr("reprise.date", { date: Number.isNaN(d.getTime())
+      ? echapper(resume.exportedAt) : d.toLocaleDateString(document.documentElement.lang === "en" ? "en" : "fr",
+        { day: "numeric", month: "long", year: "numeric" }) }));
+  }
+  const photos = resume.photos
+    ? `<p class="reprise-photos">📷 ${tr("reprise.photos", { n: resume.photos })}</p>`
+    : `<p class="reprise-photos reprise-sans">${tr("reprise.sansPhotos")}</p>`;
+  const alerte = reserves.includes("version_plus_recente")
+    ? `<p class="reprise-reserve">${tr("sauv.versionRecente")}</p>` : "";
+  return `<div class="reprise-apercu">
+    <p class="reprise-titre">${tr("reprise.trouve")}</p>
+    <ul>${lignes.map(l => `<li>${l}</li>`).join("")}</ul>
+    ${photos}${alerte}</div>`;
+}
+
+/**
+ * Ouvre le sélecteur de fichiers puis, si le fichier est valide, montre un
+ * aperçu avant d'écrire quoi que ce soit.
+ */
+export function reprendreJardinDepuisFichier(champ, surSucces) {
+  champ.value = "";           // pour que choisir deux fois le même fichier marche
+  champ.onchange = async () => {
+    const f = champ.files && champ.files[0];
+    if (!f) return;            // sélecteur annulé : rien à faire, rien d'écrit
+    let contenu;
+    try { contenu = JSON.parse(await f.text()); }
+    catch { afficherPanneauReprise(null, null, champ); return; }
+
+    // On vérifie le CONTENU, pas l'extension : un fichier peut être renommé.
+    const validation = validerExport(contenu);
+    if (!validation.valide) { afficherPanneauReprise(null, validation, champ); return; }
+    afficherPanneauReprise(contenu, validation, champ, surSucces);
+  };
+  champ.click();
+}
+
+function afficherPanneauReprise(fichier, validation, champ, surSucces) {
+  document.getElementById("reprise-panneau")?.remove();
+  const p = document.createElement("div");
+  p.id = "reprise-panneau";
+  p.className = "enr-panneau";
+  p.setAttribute("role", "dialog");
+  p.setAttribute("aria-modal", "true");
+
+  const invalide = !fichier;
+  p.innerHTML = `
+    <div class="enr-boite">
+      <div class="enr-entete">
+        <strong>${tr(invalide ? "reprise.invalideTitre" : "reprise.titre")}</strong>
+        <button type="button" class="enr-fermer" aria-label="${tr("enr.fermer")}">✕</button>
+      </div>
+      ${invalide
+        ? `<p class="reprise-invalide">${tr("reprise.invalide")}</p>`
+        : apercuHTML(validation.resume, validation.reserves)}
+      ${!invalide && jardinPresent() ? `<p class="reprise-reserve">${tr("reprise.remplace")}</p>` : ""}
+      <div class="sauv-actions">
+        ${invalide
+          ? `<button type="button" class="btn-principal" id="reprise-autre">${tr("reprise.autreFichier")}</button>`
+          : `<button type="button" class="btn-principal" id="reprise-valider">${tr("reprise.valider")}</button>
+             <button type="button" class="enr-chip" id="reprise-annuler">${tr("reprise.annuler")}</button>`}
+      </div>
+      <p class="sauv-message" id="reprise-message" role="status"></p>
+    </div>`;
+  document.body.appendChild(p);
+
+  const fermer = () => p.remove();
+  p.querySelector(".enr-fermer").addEventListener("click", fermer);
+  p.addEventListener("click", (e) => { if (e.target === p) fermer(); });
+  p.querySelector("#reprise-annuler")?.addEventListener("click", fermer);
+  p.querySelector("#reprise-autre")?.addEventListener("click", () => {
+    fermer();
+    reprendreJardinDepuisFichier(champ, surSucces);
+  });
+
+  p.querySelector("#reprise-valider")?.addEventListener("click", async () => {
+    const message = p.querySelector("#reprise-message");
+    message.textContent = tr("reprise.enCours");
+    // Exactement le même moteur que depuis les réglages : l'aperçu ayant déjà
+    // été montré et accepté, la confirmation est immédiate.
+    const r = await restaurerJardin(fichier, () => Promise.resolve(true));
+    if (r.ok) {
+      message.textContent = tr("sauv.restaure");
+      if (typeof surSucces === "function") surSucces(r);
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      message.textContent = r.etape === "integrite"
+        ? tr("reprise.echecIntegrite") : tr("sauv.echecRestauration");
+    }
+  });
+}
+
+/** Le point d'entrée de l'accueil n'apparaît que s'il n'y a pas déjà un jardin. */
+function brancherRepriseAccueil() {
+  const bloc = document.getElementById("entree-reprise");
+  const bouton = document.getElementById("btn-restaurer-accueil");
+  const champ = document.getElementById("fichier-restauration-accueil");
+  if (!bloc || !bouton || !champ) return;
+  bloc.hidden = jardinPresent();
+  bouton.addEventListener("click", () => reprendreJardinDepuisFichier(champ));
+}
+
 window.Sauvegarde.ouvrirPanneau = ouvrirPanneauSauvegarde;
+window.Sauvegarde.reprendre = reprendreJardinDepuisFichier;
+window.Sauvegarde.jardinPresent = jardinPresent;
 window.Sauvegarde.secours = Secours;
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-sauvegarde")?.addEventListener("click", ouvrirPanneauSauvegarde);
+  brancherRepriseAccueil();
   demarrerSauvegarde();
 });
 if (document.readyState !== "loading") {
   document.getElementById("btn-sauvegarde")?.addEventListener("click", ouvrirPanneauSauvegarde);
+  brancherRepriseAccueil();
   demarrerSauvegarde();
 }

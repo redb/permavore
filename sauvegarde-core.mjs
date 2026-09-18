@@ -238,7 +238,9 @@ export function validerExport(fichier) {
   if (!Number.isFinite(version) || version < 1) erreurs.push("version_absente");
   else if (version > FORMAT_VERSION) reserves.push("version_plus_recente");
 
-  const tableau = (v) => (v === null || v === undefined ? [] : v);
+  // Un fichier invalide peut contenir n'importe quoi à la place d'un tableau :
+  // la validation doit l'encaisser, pas s'y casser.
+  const tableau = (v) => (Array.isArray(v) ? v : []);
   const estTableau = (v, nom) => {
     if (v === null || v === undefined) return true;
     if (!Array.isArray(v)) { erreurs.push(`${nom}_invalide`); return false; }
@@ -254,14 +256,22 @@ export function validerExport(fichier) {
     if (mauvaises) reserves.push(`instances_incompletes:${mauvaises}`);
   }
 
+  // L'aperçu ne montre QUE ce que le fichier contient réellement : un champ
+  // absent reste absent, il n'est pas remplacé par un zéro rassurant.
+  const prefs = fichier.garden?.preferences || null;
+  const cultures = new Set(tableau(fichier.instances).map(i => i && i.cultureId).filter(Boolean));
   const resume = {
+    lieu: (prefs && typeof prefs.ville === "string" && prefs.ville.trim()) || null,
+    surface: prefs && Number.isFinite(Number(prefs.surface)) ? Number(prefs.surface) : null,
     instances: tableau(fichier.instances).length,
+    culturesDistinctes: cultures.size,
     zones: tableau(fichier.zones).length,
     occupations: tableau(fichier.occupations).length,
     cultures: tableau(fichier.cultures).length,
+    photos: tableau(fichier.sachets).length,
     ressources: fichier.ressources ? "présentes" : "absentes",
     plan: fichier.garden?.plan ? "présent" : "absent",
-    preferences: fichier.garden?.preferences ? "présentes" : "absentes",
+    preferences: prefs ? "présentes" : "absentes",
     exportedAt: fichier.exportedAt || null,
     formatVersion: fichier.formatVersion ?? null,
   };

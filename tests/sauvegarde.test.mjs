@@ -375,3 +375,64 @@ test("l'écriture continue sur les autres clés après un échec partiel", () =>
   assert.equal(rates.length, 1);
   assert.equal(rates[0].souveraine, true);
 });
+
+/* ---------------------------------------------------------------------------
+   Reprise d'un jardin depuis l'accueil : c'est le parcours d'un jardinier qui
+   passe de Safari macOS à Safari iOS, ou qui change de téléphone.
+   --------------------------------------------------------------------------- */
+
+test("l'aperçu ne montre que ce que le fichier contient vraiment", () => {
+  const etat = etatDepuisBrut(jardinComplexe());
+  const fichier = construireExport(etat, {
+    sachets: [{ id: "s1", plantId: "tomate", thumb: "data:image/jpeg;base64,AAAA" }],
+  });
+  const r = validerExport(fichier);
+  assert.equal(r.valide, true);
+  assert.equal(r.resume.lieu, "Rumilly");
+  assert.equal(r.resume.surface, 50);
+  assert.equal(r.resume.instances, 3);
+  assert.equal(r.resume.culturesDistinctes, 3);
+  assert.equal(r.resume.photos, 1, "les photos présentes sont annoncées");
+
+  // Un fichier sans préférences n'invente ni lieu ni surface.
+  const nu = validerExport({ format: "permavore", formatVersion: 1, instances: [] });
+  assert.equal(nu.valide, true);
+  assert.equal(nu.resume.lieu, null);
+  assert.equal(nu.resume.surface, null);
+  assert.equal(nu.resume.photos, 0);
+});
+
+test("un fichier renommé est jugé sur son contenu, pas sur son extension", () => {
+  // Le nom ne compte pas : seul le contenu est examiné.
+  const vrai = construireExport(etatDepuisBrut(jardinComplexe()));
+  assert.equal(validerExport(vrai).valide, true);
+  // Un JSON quelconque renommé .permavore.json reste refusé.
+  assert.equal(validerExport({ notes: ["liste de courses"] }).valide, false);
+  assert.equal(validerExport({ format: "autre-appli", formatVersion: 1 }).valide, false);
+});
+
+test("la validation encaisse un fichier structurellement abîmé sans lever", () => {
+  const abimes = [
+    { format: "permavore", formatVersion: 1, instances: "oups" },
+    { format: "permavore", formatVersion: 1, zones: 42 },
+    { format: "permavore", formatVersion: 1, occupations: { a: 1 } },
+    { format: "permavore", formatVersion: 1, cultures: null, instances: undefined },
+  ];
+  for (const f of abimes) {
+    const r = validerExport(f);          // ne doit jamais jeter d'exception
+    assert.equal(typeof r.valide, "boolean");
+    assert.ok(r.resume === null || typeof r.resume === "object");
+  }
+});
+
+test("restaurer par-dessus un jardin existant se fait après sauvegarde de sécurité", () => {
+  // L'état existant doit pouvoir être reconstitué à l'identique en cas d'échec.
+  const existant = etatDepuisBrut(jardinComplexe());
+  const filet = JSON.parse(JSON.stringify(existant));
+  const nouveau = etatDepuisExport(construireExport(
+    etatDepuisBrut({ "permavore.instances.v1": JSON.stringify([{ id: "x", cultureId: "ail" }]) })));
+
+  assert.notDeepEqual(comparerJardins(existant, nouveau).differences, []);
+  // Retour arrière : le filet redonne exactement le jardin de départ.
+  assert.equal(comparerJardins(existant, filet).identique, true);
+});

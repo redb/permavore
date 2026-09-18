@@ -970,3 +970,18 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .sauv-alerte-fermer{border:none;background:none;cursor:pointer;opacity:.6;font-size:1rem}
 .sauv-secours{border-top:1px solid rgba(0,0,0,.12);margin-top:.6rem;padding-top:.6rem}
 .sauv-secours em{opacity:.7;font-style:normal;font-size:.85rem}
+
+/* --- Reprise d'un jardin depuis l'accueil -------------------------------- */
+.entree-reprise{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;
+  margin:.2rem 0 .6rem;font-size:.92rem;opacity:.9}
+.lien-discret{border:none;background:none;padding:0;font:inherit;font-weight:600;
+  color:#3f6b46;text-decoration:underline;cursor:pointer}
+.lien-discret:hover{color:#4a8c58}
+.reprise-apercu ul{list-style:none;margin:.4rem 0;padding:0;display:grid;gap:.2rem}
+.reprise-apercu li{font-size:.95rem}
+.reprise-titre{margin:.2rem 0;font-size:.9rem;opacity:.8}
+.reprise-photos{margin:.4rem 0 0;font-size:.9rem;color:#2f7a3e}
+.reprise-photos.reprise-sans{color:#6b6357}
+.reprise-reserve{margin:.5rem 0 0;font-size:.88rem;background:rgba(201,154,59,.15);
+  border-radius:8px;padding:.45rem .6rem;line-height:1.45}
+.reprise-invalide{margin:.4rem 0;font-size:.95rem;color:#a4452c;line-height:1.45}
