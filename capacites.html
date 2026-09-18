@@ -53,7 +53,11 @@ document.getElementById("nav").textContent = navigator.userAgent;
 document.getElementById("essayer").addEventListener("click", async () => {
   const sortie = document.getElementById("essai");
   if (!c.choisirFichier) {
-    sortie.textContent = "RESULTAT: showSaveFilePicker absent — repli téléchargement";
+    // Dire le repli RÉEL : sur Safari, Permavore passe par la feuille de
+    // partage avant d'envisager un téléchargement.
+    sortie.textContent = c.partageNatif
+      ? "RESULTAT: showSaveFilePicker absent — Permavore utilisera le partage natif (Fichiers, iCloud Drive)"
+      : "RESULTAT: showSaveFilePicker absent — repli téléchargement";
     return;
   }
   try {
