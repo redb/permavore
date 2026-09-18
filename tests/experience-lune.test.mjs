@@ -203,3 +203,65 @@ test("sur de nombreux participants, les deux ordres apparaissent également", ()
   assert.ok(Math.min(a, b) / Math.max(a, b) > 0.6,
     `répartition trop déséquilibrée : ${JSON.stringify(compte)}`);
 });
+
+/* ---------------------------------------------------------------------------
+   Relances : Permavore doit venir vers le jardinier. Mais le silence est le cas
+   normal — on ne réclame rien tant qu'il n'y a rien à faire.
+   --------------------------------------------------------------------------- */
+
+test("rien n'est demandé tant que la fenêtre de semis n'est pas ouverte", () => {
+  const w = sandbox();
+  const e = experience(w);
+  const veille = new Date(Date.parse(e.lots.A.fenetreDebut) - 5 * 86400000);
+  const etape = w.ExperienceLune.etapeDue(veille);
+  assert.equal(etape.quoi, "attendre", "on n'interrompt pas le jardinier pour rien");
+  assert.equal(etape.urgence, "aVenir");
+});
+
+test("la fenêtre ouverte déclenche la demande de semis, et son dépassement le dit", () => {
+  const w = sandbox();
+  const e = experience(w);
+  const pendant = new Date(Date.parse(e.lots.A.fenetreDebut) + 43200000);
+  assert.deepEqual(
+    (({ quoi, urgence, lot }) => ({ quoi, urgence, lot }))(w.ExperienceLune.etapeDue(pendant)),
+    { quoi: "semer", urgence: "maintenant", lot: "A" });
+
+  const apres = new Date(Date.parse(e.lots.A.fenetreFin) + 3 * 86400000);
+  const tard = w.ExperienceLune.etapeDue(apres);
+  assert.equal(tard.quoi, "semer");
+  assert.equal(tard.urgence, "passee", "on le dit franchement plutôt que de faire comme si");
+});
+
+test("après le semis, la levée n'est demandée qu'une fois plausible", () => {
+  const w = sandbox();
+  const E = w.ExperienceLune;
+  const e = experience(w);
+  E.enregistrerSemis(e.id, "A", { quand: "2026-09-21T09:00:00Z", releveLunaire: w.Lune.releveLunaire });
+
+  // Deux jours après : trop tôt, un radis ne lève pas en deux jours.
+  assert.equal(E.etapeDue(new Date("2026-09-23T09:00:00Z")), null);
+  // Quatre jours : la question a du sens.
+  const etape = E.etapeDue(new Date("2026-09-25T09:00:00Z"));
+  assert.equal(etape.quoi, "levee");
+  assert.equal(etape.lot, "A");
+});
+
+test("la récolte n'est proposée qu'après le délai du protocole", () => {
+  const w = sandbox();
+  const E = w.ExperienceLune;
+  const e = experience(w);
+  E.enregistrerSemis(e.id, "A", { quand: "2026-09-21T09:00:00Z", releveLunaire: w.Lune.releveLunaire });
+  E.enregistrerObservation(e.id, "A", { leveeLe: "2026-09-26", plantsLeves: 17 });
+
+  assert.equal(E.etapeDue(new Date("2026-10-01T09:00:00Z")), null, "dix jours : trop tôt");
+  const etape = E.etapeDue(new Date("2026-10-15T09:00:00Z"));
+  assert.equal(etape.quoi, "recolte");
+});
+
+test("une expérience abandonnée ne réclame plus jamais rien", () => {
+  const w = sandbox();
+  const E = w.ExperienceLune;
+  const e = experience(w);
+  E.abandonner(e.id);
+  assert.equal(E.etapeDue(new Date("2027-01-01T00:00:00Z")), null);
+});

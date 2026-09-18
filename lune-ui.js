@@ -147,6 +147,7 @@ function afficherExperience() {
     }
     E().enregistrerSemis(courante.id, lot, { instanceCultureId: instanceId });
     afficherExperience();
+    afficherRappel();
   }));
 
   p.querySelectorAll("[data-levee]").forEach(b => b.addEventListener("click", () => {
@@ -184,6 +185,39 @@ function demanderNombre(question, suite) {
 
 /* ---------- branchement ---------------------------------------------------- */
 
+/*
+   Rappel discret dans la page : Permavore doit venir vers le jardinier, pas
+   attendre qu'il pense à ouvrir un panneau. Une seule ligne, refermable, et
+   rien du tout quand il n'y a rien à faire.
+*/
+function afficherRappel() {
+  document.getElementById("lune-rappel")?.remove();
+  if (!E()) return;
+  const etape = E().etapeDue();
+  if (!etape || etape.quoi === "attendre") return;
+
+  const messages = {
+    semer: etape.urgence === "passee"
+      ? T("lune.rappel.semerRetard", { lot: etape.lot })
+      : T("lune.rappel.semer", { lot: etape.lot }),
+    levee: T("lune.rappel.levee", { lot: etape.lot, jours: etape.jours }),
+    recolte: T("lune.rappel.recolte", { lot: etape.lot, jours: etape.jours }),
+  };
+  const b = document.createElement("div");
+  b.id = "lune-rappel";
+  b.className = "lune-rappel";
+  b.setAttribute("role", "status");
+  b.innerHTML = `<span>🌙 ${messages[etape.quoi]}</span>
+    <button type="button" class="enr-chip" id="lune-rappel-ouvrir">${T("lune.rappel.ouvrir")}</button>
+    <button type="button" class="recu-fermer" aria-label="${T("enr.fermer")}">✕</button>`;
+  const hote = document.querySelector("main") || document.body;
+  hote.prepend(b);
+  b.querySelector("#lune-rappel-ouvrir").addEventListener("click", () => {
+    b.remove(); afficherExperience();
+  });
+  b.querySelector(".recu-fermer").addEventListener("click", () => b.remove());
+}
+
 function brancher() {
   const bouton = document.getElementById("btn-experience-lune");
   if (!bouton) return;
@@ -196,6 +230,9 @@ function brancher() {
   // Le bouton annonce discrètement qu'une étape attend le jardinier.
   const courante = E() && E().experienceCourante();
   if (courante) bouton.classList.add("lune-en-cours");
+  afficherRappel();
+  // Le rappel réapparaît quand l'affichage des résultats se reconstruit.
+  document.addEventListener("climat:maj", afficherRappel);
 }
 
 if (document.readyState === "loading") {

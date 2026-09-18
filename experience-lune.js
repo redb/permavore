@@ -296,6 +296,57 @@ function contributionCollective(experience, contexte = {}) {
   };
 }
 
+/**
+ * Ce que l'expérience attend du jardinier, maintenant. Permavore est censé être
+ * proactif : personne ne va ouvrir un panneau tous les matins pour vérifier si
+ * c'est le jour. On calcule donc l'étape due, et l'interface la rappelle.
+ *
+ * Renvoie null quand il n'y a rien à faire — le silence est le cas normal.
+ */
+function etapeDue(maintenant = new Date()) {
+  const e = experienceCourante();
+  if (!e) return null;
+  const aujourdhui = maintenant.toISOString().slice(0, 10);
+
+  for (const cle of ["A", "B"]) {
+    const l = e.lots[cle];
+    if (!l.semeLe) {
+      // Fenêtre de semis ouverte ? En retard ? Ou encore à venir ?
+      if (aujourdhui >= l.fenetreDebut && aujourdhui <= l.fenetreFin) {
+        return { experienceId: e.id, lot: cle, quoi: "semer", urgence: "maintenant" };
+      }
+      if (aujourdhui > l.fenetreFin) {
+        return { experienceId: e.id, lot: cle, quoi: "semer", urgence: "passee",
+          depuis: l.fenetreFin };
+      }
+      // Le lot A n'est pas encore semé : rien à demander pour B avant lui.
+      return { experienceId: e.id, lot: cle, quoi: "attendre",
+        urgence: "aVenir", quand: l.fenetreDebut };
+    }
+    if (!Number.isFinite(l.plantsLeves)) {
+      const jours = joursDepuis(l.semeLe, maintenant);
+      const [tot, tard] = PROTOCOLES[e.cultureId].joursLeveeAttendue;
+      if (jours >= tot) {
+        return { experienceId: e.id, lot: cle, quoi: "levee",
+          urgence: jours > tard ? "passee" : "maintenant", jours };
+      }
+      return null;   // trop tôt pour demander quoi que ce soit
+    }
+    if (!Number.isFinite(l.poidsRecolteG)) {
+      const jours = joursDepuis(l.semeLe, maintenant);
+      const [tot] = PROTOCOLES[e.cultureId].joursRecolteAttendue;
+      if (jours >= tot) {
+        return { experienceId: e.id, lot: cle, quoi: "recolte", urgence: "maintenant", jours };
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+const joursDepuis = (iso, maintenant) =>
+  Math.floor((maintenant.getTime() - Date.parse(iso)) / 86400000);
+
 const experiences = () => [...EXPERIENCES];
 const experienceCourante = () =>
   EXPERIENCES.find(e => e.statut === "planned" || e.statut === "active") || null;
@@ -308,5 +359,6 @@ if (typeof window !== "undefined") {
     creerExperience, enregistrerSemis, enregistrerObservation, abandonner,
     conditionsVisibles, vueExperience, mesuresDerivees, contributionCollective,
     prochainesFenetres, experiences, experienceCourante, charger: chargerExperiences,
+    etapeDue,
   };
 }
