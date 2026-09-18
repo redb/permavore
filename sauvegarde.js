@@ -10,7 +10,9 @@
 
 import {
   construireExport, etatDepuisExport, validerExport, comparerJardins, FORMAT_VERSION,
+  clesMetier,
 } from "./sauvegarde-core.mjs";
+import * as Secours from "./fichier-secours.js";
 import {
   initialiserStockage, lireLocalStorage, appliquerVersLocalStorage, ecrireEtat,
   sauvegardeSecurite, restaurerSauvegarde, sauvegardes, synchroniserCopieDurable,
@@ -37,7 +39,8 @@ function messageEtat() {
 
 /* ---------- export -------------------------------------------------------- */
 
-export async function exporterJardin() {
+/** Contenu de sauvegarde COMPLET : c'est lui qui garantit ORIGINAL ≡ RESTAURÉ. */
+export async function contenuSauvegarde() {
   const etat = lireLocalStorage();
   const entrees = await journal(500).catch(() => []);
   const sachets = await lireSachets().catch(() => []);
@@ -45,13 +48,23 @@ export async function exporterJardin() {
     appVersion: document.documentElement.dataset.version || null,
     journal: entrees, sachets,
   });
-  const texte = JSON.stringify(fichier, null, 2);
+  return JSON.stringify(fichier, null, 2);
+}
+
+/** Nom tiré du lieu quand il est connu, pour que le fichier se reconnaisse. */
+function lieuDuJardin() {
+  try { return JSON.parse(localStorage.getItem("permavore.jardin.v1") || "{}").ville || null; }
+  catch { return null; }
+}
+
+export async function exporterJardin() {
+  const texte = await contenuSauvegarde();
+  const fichier = JSON.parse(texte);
   const blob = new Blob([texte], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const jour = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `permavore-mon-jardin-${jour}.json`;
+  a.download = Secours.nomPropose(lieuDuJardin());
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -128,12 +141,24 @@ export async function demarrerSauvegarde() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") synchroniserCopieDurable();
   });
-  // Toute écriture du jardin passe par localStorage : on l'observe.
+  // Toute écriture du jardin passe par localStorage : on l'observe. On ne
+  // réagit QUE aux clés métier — un cache climatique ou une préférence
+  // d'affichage ne doit déclencher aucune écriture disque.
+  const metier = new Set(clesMetier());
   const poser = localStorage.setItem.bind(localStorage);
   localStorage.setItem = function (cle, valeur) {
     poser(cle, valeur);
-    if (typeof cle === "string" && cle.startsWith("permavore.")) planifier();
+    if (typeof cle === "string" && metier.has(cle)) {
+      planifier();
+      Secours.jardinModifie();
+    }
   };
+  window.addEventListener("pagehide", () => Secours.ecrireAvantFermeture());
+
+  // Copie de secours : on détecte ce que la plateforme permet, on n'invente rien.
+  const capacites = Secours.initialiser(contenuSauvegarde);
+  document.addEventListener("secours:etat", () => majPanneauSecours());
+  etatStockage.capacitesFichier = capacites;
   return etatStockage.resultat;
 }
 
@@ -207,6 +232,7 @@ export function ouvrirPanneauSauvegarde() {
         <button type="button" class="btn-principal" id="sauv-exporter">${tr("sauv.exporter")}</button>
         <button type="button" class="enr-chip" id="sauv-importer">${tr("sauv.restaurer")}</button>
       </div>
+      <div class="sauv-secours" id="sauv-secours"></div>
       <input type="file" id="sauv-fichier" accept="application/json,.json" hidden />
       <p class="sauv-message" id="sauv-message" role="status"></p>
     </div>`;
@@ -216,6 +242,7 @@ export function ouvrirPanneauSauvegarde() {
   p.addEventListener("click", (e) => { if (e.target === p) fermer(); });
   p.querySelector(".enr-fermer").addEventListener("click", fermer);
   const message = p.querySelector("#sauv-message");
+  majPanneauSecours();
 
   p.querySelector("#sauv-exporter").addEventListener("click", async () => {
     try {
@@ -261,7 +288,78 @@ export function ouvrirPanneauSauvegarde() {
   });
 }
 
+/* ---------- bloc « copie de secours » ------------------------------------- */
+
+/*
+   Les états sont distingués sans complaisance : « à jour » n'est affiché que si
+   une écriture a réellement abouti, et « non prise en charge » est dit
+   franchement plutôt que masqué derrière une fausse autosauvegarde.
+*/
+const LIBELLE_SECOURS = {
+  nonSupportee: "secours.etat.nonSupportee",
+  nonConfiguree: "secours.etat.nonConfiguree",
+  aJour: "secours.etat.aJour",
+  aMettreAJour: "secours.etat.aMettreAJour",
+  ecriture: "secours.etat.ecriture",
+  echec: "secours.etat.echec",
+};
+
+function majPanneauSecours() {
+  const hote = document.getElementById("sauv-secours");
+  if (!hote) return;
+  const e = Secours.etatSecours();
+  const c = Secours.capacites();
+  const ton = e.statut === "aJour" ? "bon"
+    : (e.statut === "echec" ? "alerte" : "neutre");
+  const quand = e.derniereEcriture
+    ? ` <em>${tr("secours.le", { date: e.derniereEcriture.slice(0, 16).replace("T", " ") })}</em>` : "";
+
+  let actions = "";
+  if (e.statut === "nonSupportee") {
+    actions = `<button type="button" class="enr-chip" id="secours-telecharger">${tr("secours.telecharger")}</button>`;
+  } else if (e.statut === "nonConfiguree") {
+    actions = `<button type="button" class="enr-chip" id="secours-creer">${tr("secours.creer")}</button>`;
+  } else {
+    actions = `<button type="button" class="enr-chip" id="secours-ecrire">${tr("secours.mettreAJour")}</button>
+      <button type="button" class="enr-chip" id="secours-oublier">${tr("secours.oublier")}</button>`;
+  }
+
+  hote.innerHTML = `
+    <p class="sauv-etat sauv-${ton}">${tr(LIBELLE_SECOURS[e.statut] || "secours.etat.nonConfiguree")}${quand}</p>
+    ${e.nom ? `<p class="sauv-explication">${tr("secours.fichier", { nom: echapper(e.nom) })}</p>` : ""}
+    <p class="sauv-explication">${c.autosauvegarde ? tr("secours.auto") : tr("secours.manuel")}</p>
+    <div class="sauv-actions">${actions}</div>`;
+
+  hote.querySelector("#secours-creer")?.addEventListener("click", async () => {
+    const r = await Secours.configurer(lieuDuJardin());
+    const m = document.getElementById("sauv-message");
+    if (m) {
+      m.textContent = r.ok ? tr("secours.cree", { ko: Math.max(1, Math.round(r.octets / 1024)) })
+        : r.raison === "annule" ? tr("secours.annule") : tr("secours.echecCreation");
+    }
+  });
+  hote.querySelector("#secours-ecrire")?.addEventListener("click", async () => {
+    let r = await Secours.ecrireMaintenant();
+    // Le droit d'écrire a pu expirer : il se redemande sur ce geste, pas en silence.
+    if (!r.ok && r.raison === "droit_a_redemander") r = await Secours.redemanderDroit();
+    const m = document.getElementById("sauv-message");
+    if (m) m.textContent = r.ok ? tr("secours.misAJour") : tr("secours.echecEcriture");
+  });
+  hote.querySelector("#secours-oublier")?.addEventListener("click", async () => {
+    await Secours.oublier();
+  });
+  hote.querySelector("#secours-telecharger")?.addEventListener("click", async () => {
+    // Plateformes sans réécriture : partage natif si disponible, sinon
+    // téléchargement. Les deux laissent le fichier à l'utilisateur.
+    const contenu = await contenuSauvegarde();
+    const nom = Secours.nomPropose(lieuDuJardin());
+    const partage = await Secours.partager(contenu, nom);
+    if (!partage.ok) await exporterJardin();
+  });
+}
+
 window.Sauvegarde.ouvrirPanneau = ouvrirPanneauSauvegarde;
+window.Sauvegarde.secours = Secours;
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-sauvegarde")?.addEventListener("click", ouvrirPanneauSauvegarde);
   demarrerSauvegarde();

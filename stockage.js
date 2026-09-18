@@ -25,7 +25,7 @@ import {
 } from "./sauvegarde-core.mjs";
 
 const NOM_BASE = "permavore-jardin";
-const VERSION_BASE = 2;   // v2 : ajout du magasin de cache climatique
+const VERSION_BASE = 3;   // v3 : magasin des références de fichiers externes
 const MAGASIN_ETAT = "etat";            // clé → valeur, le jardin lui-même
 const MAGASIN_META = "meta";            // version de schéma, horodatages
 const MAGASIN_JOURNAL = "journal";      // ce qui a changé, pour la synchro future
@@ -36,6 +36,12 @@ const MAGASIN_SAUVEGARDES = "sauvegardes";  // filets avant opération risquée
    pas sa donnée, c'est un calcul reproductible.
 */
 const MAGASIN_CLIMAT = "climat";
+/*
+   Références de fichiers choisis par le jardinier (copie de secours). Ce ne sont
+   pas des données mais des POIGNÉES vers un fichier qui lui appartient : elles
+   ne valent que sur cet appareil et ne sont jamais exportées.
+*/
+const MAGASIN_FICHIERS = "fichiers";
 
 let basePromesse = null;
 
@@ -77,6 +83,9 @@ function ouvrir() {
       }
       if (!db.objectStoreNames.contains(MAGASIN_CLIMAT)) {
         db.createObjectStore(MAGASIN_CLIMAT);      // clé = cleCacheClimat
+      }
+      if (!db.objectStoreNames.contains(MAGASIN_FICHIERS)) {
+        db.createObjectStore(MAGASIN_FICHIERS);    // références de fichiers choisis
       }
     };
     req.onsuccess = () => resoudre(req.result);
@@ -227,6 +236,23 @@ export async function viderClimatCache() {
   catch { return false; }
 }
 
+/* ---------- référence du fichier de secours ------------------------------- */
+
+export async function lireReference(cle = "secours") {
+  try { return (await avecMagasin(MAGASIN_FICHIERS, "readonly", s => promesse(s.get(cle)))) || null; }
+  catch { return null; }
+}
+
+export async function ecrireReference(entree, cle = "secours") {
+  try { await avecMagasin(MAGASIN_FICHIERS, "readwrite", s => { s.put(entree, cle); }); return true; }
+  catch (e) { signalerEchec("reference_fichier", e); return false; }
+}
+
+export async function oublierReference(cle = "secours") {
+  try { await avecMagasin(MAGASIN_FICHIERS, "readwrite", s => { s.delete(cle); }); return true; }
+  catch { return false; }
+}
+
 /* ---------- journal ------------------------------------------------------ */
 
 export async function journaliser(entree) {
@@ -249,8 +275,14 @@ export async function journal(limite = 200) {
 const BASE_SACHETS = "permavore-sachets";
 const STORE_SACHETS = "sachets";
 
+// Connexion réutilisée : ouvrir une base à chaque appel sans la refermer
+// laissait des connexions ouvertes, ce qui empêche ensuite toute suppression
+// de la base (et bloquerait une montée de version).
+let sachetsPromesse = null;
+
 function ouvrirSachets() {
-  return new Promise((ok, ko) => {
+  if (sachetsPromesse) return sachetsPromesse;
+  sachetsPromesse = new Promise((ok, ko) => {
     if (typeof indexedDB === "undefined") return ko(new Error("indexeddb_absent"));
     const req = indexedDB.open(BASE_SACHETS, 1);
     req.onupgradeneeded = () => {
@@ -262,7 +294,8 @@ function ouvrirSachets() {
     };
     req.onsuccess = () => ok(req.result);
     req.onerror = () => ko(req.error);
-  });
+  }).catch(e => { sachetsPromesse = null; throw e; });
+  return sachetsPromesse;
 }
 
 export async function lireSachets() {
@@ -404,16 +437,22 @@ export async function synchroniserCopieDurable() {
 export async function fermerBases() {
   try { const db = await basePromesse; if (db) db.close(); } catch { /* déjà fermée */ }
   basePromesse = null;
-  try { const db = await ouvrirSachets(); db.close(); } catch { /* absente */ }
+  try { const db = await sachetsPromesse; if (db) db.close(); } catch { /* déjà fermée */ }
+  sachetsPromesse = null;
+  // sachets.js garde sa propre connexion : elle a son fermerSachets().
+  if (typeof window !== "undefined" && typeof window.fermerSachets === "function") {
+    window.fermerSachets();
+  }
 }
 
 /** Efface la copie durable — réservé aux tests de non-perte. */
 export async function effacerToutPourTest() {
   const db = await ouvrir();
   await new Promise((ok, ko) => {
-    const tx = db.transaction([MAGASIN_ETAT, MAGASIN_META, MAGASIN_JOURNAL, MAGASIN_SAUVEGARDES], "readwrite");
-    [MAGASIN_ETAT, MAGASIN_META, MAGASIN_JOURNAL, MAGASIN_SAUVEGARDES]
-      .forEach(n => tx.objectStore(n).clear());
+    const magasins = [MAGASIN_ETAT, MAGASIN_META, MAGASIN_JOURNAL, MAGASIN_SAUVEGARDES,
+      MAGASIN_CLIMAT, MAGASIN_FICHIERS];
+    const tx = db.transaction(magasins, "readwrite");
+    magasins.forEach(n => tx.objectStore(n).clear());
     tx.oncomplete = ok; tx.onerror = () => ko(tx.error);
   });
   for (const cle of clesMetier()) { try { localStorage.removeItem(cle); } catch { /* */ } }
