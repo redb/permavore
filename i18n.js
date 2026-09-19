@@ -359,6 +359,7 @@ const I18N = {
   "sauv.confirmer": { fr: "Remplacer le jardin actuel par celui-ci ? Une sauvegarde de l'actuel est conservée avant toute chose.", en: "Replace the current garden with this one? A backup of the current one is kept first." },
   "sauv.annule": { fr: "Restauration annulée. Rien n'a changé.", en: "Restore cancelled. Nothing changed." },
   "sauv.restaure": { fr: "Jardin restauré et vérifié ✅", en: "Garden restored and verified ✅" },
+  "sauv.photosIncompletes": { fr: "Restauration incomplète : les données du jardin sont restaurées, mais certaines photos n’ont pas pu être vérifiées. Conserve ton fichier de sauvegarde et réessaie.", en: "Restore incomplete: garden data was restored, but some photos could not be verified. Keep your backup file and try again." },
   "sauv.echecRestauration": { fr: "La restauration a échoué : ton jardin précédent a été remis en place.", en: "Restore failed: your previous garden has been put back." },
   "sauv.etat.appareil": { fr: "✓ Enregistré sur cet appareil", en: "✓ Saved on this device" },
   "sauv.etat.restaure": { fr: "✓ Jardin récupéré depuis la sauvegarde de cet appareil", en: "✓ Garden recovered from this device's backup" },
