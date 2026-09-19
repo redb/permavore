@@ -60,8 +60,8 @@ function presenter() {
 }
 
 function demarrer() {
-  const lieu = window.state && window.state.villeCoords
-    ? { lat: window.state.villeCoords.lat, lng: window.state.villeCoords.lng } : null;
+  const lieu = typeof window.coordonneesJardin === "function"
+    ? window.coordonneesJardin() : null;
   if (!lieu) {
     panneau(`🌙 ${T("lune.titre")}`, `<p class="reprise-invalide">${T("lune.sansLieu")}</p>`);
     return;
@@ -233,6 +233,7 @@ function brancher() {
   afficherRappel();
   // Le rappel réapparaît quand l'affichage des résultats se reconstruit.
   document.addEventListener("climat:maj", afficherRappel);
+  document.addEventListener("jardin:recupere", afficherRappel);
 }
 
 if (document.readyState === "loading") {
