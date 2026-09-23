@@ -926,9 +926,11 @@ async function geocodeVille(q) {
   }).filter(Boolean).slice(0, 6);
 }
 
-// Géocodage inverse (coords → commune). Borné + fallback null.
-async function reverseVille(lat, lng) {
-  const url = `https://api-adresse.data.gouv.fr/reverse/?lon=${lng}&lat=${lat}&type=municipality`;
+// Géocodage inverse (coords → commune). Trois tentatives, de la plus précise à
+// la plus large, puis null : BAN au niveau commune, BAN au niveau adresse (la
+// première répond parfois vide en zone rurale), Nominatim (hors France).
+async function reverseVilleBAN(lat, lng, type) {
+  const url = `https://api-adresse.data.gouv.fr/reverse/?lon=${lng}&lat=${lat}${type ? "&type=" + type : ""}`;
   const reponse = await requeteJSON(url);
   const f = reponse.ok && Array.isArray(reponse.data.features)
     ? reponse.data.features[0] : null;
@@ -941,6 +943,26 @@ async function reverseVille(lat, lng) {
     lat,
     lng,
   };
+}
+async function reverseVilleNominatim(lat, lng) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&lat=${lat}&lon=${lng}`
+    + `&accept-language=${getLang() === "en" ? "en" : "fr"}`;
+  const reponse = await requeteJSON(url);
+  const a = reponse.ok && reponse.data && reponse.data.address;
+  const nom = a && (a.city || a.town || a.village || a.municipality || a.county);
+  if (typeof nom !== "string") return null;
+  return { nom: nom.slice(0, 120), cp: typeof a.postcode === "string" ? a.postcode.slice(0, 12) : "", lat, lng };
+}
+async function reverseVille(lat, lng) {
+  return (await reverseVilleBAN(lat, lng, "municipality"))
+    || (await reverseVilleBAN(lat, lng, ""))
+    || (await reverseVilleNominatim(lat, lng))
+    || null;
+}
+// Libellé de secours quand aucun service ne nomme la commune : la position
+// reste visible dans le champ, jamais un champ vide après une géolocalisation.
+function libelleCoords(lat, lng) {
+  return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
 }
 
 // --- Autocomplétion "directe dans le champ" ---
@@ -2351,18 +2373,31 @@ function init() {
   // Visite précédente avec une commune connue : on va droit aux résultats.
   // Sans commune, on reste sur l'écran d'entrée (rien n'est affiché à vide).
   const villeConnue = $("#ville").value.trim();
-  if (state._prefsConnues && villeConnue) {
+  const estLibelleCoords = /^-?\d+\.\d{3}, -?\d+\.\d{3}$/.test(villeConnue);
+  if (estLibelleCoords && state.villeCoords) $("#ville").value = "";
+  if (state._prefsConnues && $("#ville").value.trim()) {
     state._villeResolue = villeConnue;
     const z = zoneDepuisVille(villeConnue);
     if (z) majZone(z, `📍 ${villeConnue}`);
     majClimatDetecte();
     afficherResultats();
   } else if (state._prefsConnues && state.villeCoords) {
-    // Géolocalisé sans nom de commune : on repart de la position enregistrée.
+    // Géolocalisé sans nom de commune : on repart de la position enregistrée
+    // et on retente de la nommer, sans bloquer l'affichage.
     const { lat, lng } = state.villeCoords;
-    majZone(zoneDepuisCoords(lat, lng), t("geo.positiondetectee"));
+    $("#ville").value = libelleCoords(lat, lng);
+    state._villeResolue = $("#ville").value;
+    majZone(zoneDepuisCoords(lat, lng), `📡 ${$("#ville").value}`);
     majClimatDetecte();
     afficherResultats();
+    reverseVille(lat, lng).then(v => {
+      if (!v || state.villeCoords?.lat !== lat) return;   // l'utilisateur a changé entre-temps
+      $("#ville").value = v.nom;
+      state._villeResolue = v.nom;
+      majZone(zoneDepuisVille(v.nom) || zoneDepuisCoords(lat, lng), `📡 ${v.nom}`);
+      sauverPreferencesJardin();
+      rendre();
+    }).catch(() => { /* on garde le libellé de position */ });
   }
 }
 
@@ -2397,8 +2432,13 @@ function localiser() {
         majZone(z, source);
         sauverPreferencesJardin();
       } else {
+        // Aucun service n'a nommé la commune : on affiche la position telle
+        // quelle plutôt qu'un champ vide, et on la garde pour la prochaine visite.
+        $("#ville").value = libelleCoords(latitude, longitude);
+        state._villeResolue = $("#ville").value;
+        majZone(z, `📡 ${$("#ville").value}`);
         majClimatDetecte();
-        sauverPreferencesJardin();                 // la position seule vaut déjà préférence
+        sauverPreferencesJardin();
       }
       // Déjà dans les résultats (modification) : on les met à jour. Sinon, on laisse
       // la personne choisir sa surface puis valider.
