@@ -323,7 +323,7 @@ function definirDate(id, iso) {
   sauverDates();
 }
 
-// ---------- Préférences du jardin (stockage local, sans coordonnées) ----------
+// ---------- Préférences du jardin (stockage local ; coordonnées de géoloc incluses) ----------
 const LS_JARDIN = "permavore.jardin.v1";
 function chargerPreferencesJardin() {
   try {
@@ -355,7 +355,13 @@ function chargerPreferencesJardin() {
     state.curseurNourricier = curseur(brut.curseurNourricier, 0.7);
     state.curseurExperimental = curseur(brut.curseurExperimental, 0.25);
     state.invitePlanMasquee = brut.invitePlanMasquee === true;
-    state._prefsConnues = Boolean(ville || state.surface);
+    // Coordonnées de la géolocalisation : sans elles, une position GPS dont la
+    // commune n'a pas pu être nommée était perdue à la visite suivante.
+    const c = brut.villeCoords;
+    state.villeCoords = c && Number.isFinite(c.lat) && Number.isFinite(c.lng)
+      && Math.abs(c.lat) <= 90 && Math.abs(c.lng) <= 180
+      ? { lat: Number(c.lat), lng: Number(c.lng) } : null;
+    state._prefsConnues = Boolean(ville || state.villeCoords || state.surface);
     $("#ville").value = ville;
     $("#surface").value = state.surface || "";
   } catch (erreur) {
@@ -366,6 +372,7 @@ function sauverPreferencesJardin() {
   try {
     localStorage.setItem(LS_JARDIN, JSON.stringify({
       ville: $("#ville")?.value.trim().slice(0, 120) || "",
+      villeCoords: state.villeCoords || null,
       surface: state.surface,
       zone: state.zone,
       climatMonde: state.climatMonde || null,
@@ -2350,6 +2357,12 @@ function init() {
     if (z) majZone(z, `📍 ${villeConnue}`);
     majClimatDetecte();
     afficherResultats();
+  } else if (state._prefsConnues && state.villeCoords) {
+    // Géolocalisé sans nom de commune : on repart de la position enregistrée.
+    const { lat, lng } = state.villeCoords;
+    majZone(zoneDepuisCoords(lat, lng), t("geo.positiondetectee"));
+    majClimatDetecte();
+    afficherResultats();
   }
 }
 
@@ -2385,6 +2398,7 @@ function localiser() {
         sauverPreferencesJardin();
       } else {
         majClimatDetecte();
+        sauverPreferencesJardin();                 // la position seule vaut déjà préférence
       }
       // Déjà dans les résultats (modification) : on les met à jour. Sinon, on laisse
       // la personne choisir sa surface puis valider.
