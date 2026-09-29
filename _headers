@@ -1,0 +1,8 @@
+# Les fichiers de l'application doivent être revalidés à chaque visite :
+# sans cela, Safari gardait l'ancien app.js des jours après un déploiement.
+/*
+  Cache-Control: no-cache
+/icons/*
+  Cache-Control: public, max-age=604800
+/sources/*
+  Cache-Control: public, max-age=604800

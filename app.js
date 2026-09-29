@@ -3316,6 +3316,7 @@ function elementPlanche(p) {
   d.dataset.planche = p.id;
 
   const petite = p.w * p.h <= 2;
+  if (p.w * TAILLE_CASE_PX < 40 || p.h * TAILLE_CASE_PX < 40) d.classList.add("mini");
   if (plante) {
     const enRecolte = recolteCommencee(p, plante);
     if (enRecolte) d.classList.add("recolte");
@@ -3503,12 +3504,29 @@ function installerDessinPlan() {
     });
   }
 
+  // Planche sous une case, avec une tolérance d'une case au doigt : une planche
+  // de 0,25 m² fait 13 à 26 px, le doigt la rate et tombait sur la grille.
+  function plancheProche(c, tolerance) {
+    let meilleure = null, dist = Infinity;
+    for (const p of jardin.planches) {
+      const dx = Math.max(p.x - c.x, 0, c.x - (p.x + p.w - 1));
+      const dy = Math.max(p.y - c.y, 0, c.y - (p.y + p.h - 1));
+      const d = Math.max(dx, dy);
+      if (d <= tolerance && d < dist) { dist = d; meilleure = p; }
+    }
+    return meilleure;
+  }
+
   g.addEventListener("pointerdown", e => {
     if (rectAttente) return;                       // une planche attend déjà d'être validée
     if (mode === "deplacer" && e.pointerType !== "mouse") return;   // le doigt fait défiler
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const surPlanche = e.target.closest("[data-planche]");
     if (surPlanche) return;                       // clic sur une planche : géré ailleurs
+    if (e.pointerType !== "mouse") {
+      const voisine = plancheProche(caseDepuisEvent(e), 1);
+      if (voisine) { ouvrirModalePlanche(voisine.id); return; }
+    }
     depart = caseDepuisEvent(e);
     g.setPointerCapture(e.pointerId);
     apercu = el("div", "plan-apercu");
@@ -3525,10 +3543,23 @@ function installerDessinPlan() {
     if (!depart) return;
     const fin = caseDepuisEvent(e);
     let r = rectEntre(depart, fin);
-    // Doigt levé sans avoir bougé (tap simple) → planche d'1 m² (2 × 2 mailles)
+    // Doigt levé sans avoir bougé (tap simple) → planche d'1 m² (2 × 2 mailles),
+    // ancrée là où elle tient autour du doigt. Un tap ne crée jamais 0,25 m² :
+    // c'était la source des mini-carreaux posés par erreur.
     if (r.w === 1 && r.h === 1) {
-      const carre = { x: Math.min(r.x, jardin.cols - 2), y: Math.min(r.y, jardin.lignes - 2), w: 2, h: 2 };
-      if (placeLibre(carre)) r = carre;
+      const candidats = [[0, 0], [-1, 0], [0, -1], [-1, -1]].map(([dx, dy]) => ({
+        x: Math.max(0, Math.min(r.x + dx, jardin.cols - 2)),
+        y: Math.max(0, Math.min(r.y + dy, jardin.lignes - 2)), w: 2, h: 2,
+      }));
+      const libre = candidats.find(placeLibre);
+      depart = null;
+      if (!libre) {
+        if (apercu) { apercu.remove(); apercu = null; }
+        const p = plancheProche(r, 1);
+        if (p) ouvrirModalePlanche(p.id);
+        return;
+      }
+      r = libre;
     }
     depart = null;
     proposerValidation(r);

@@ -584,6 +584,8 @@ footer strong { color: var(--vert-fonce); }
 .planche.recolte { background: #fff3d9; border-color: var(--now); color: #8a5d10; }
 .planche .pl-emoji { font-size: 20px; }
 .planche .pl-surface { font-size: 10px; font-weight: 600; opacity: .8; }
+.planche.mini .pl-surface, .planche.mini > span:not(.pl-emoji) { display: none; }
+.planche.mini .pl-emoji { font-size: 14px; }
 .planche .pl-alerte { position: absolute; top: 2px; right: 4px; font-size: 12px; }
 .plan-apercu {
   position: absolute; z-index: 3; border: 2px dashed var(--vert); border-radius: 8px;
