@@ -2204,6 +2204,8 @@ function traduireStatique() {
   set("#footer-marque", t("footer.marque"));
   set("#footer-note", t("footer.note"));
   set("#footer-credit", t("footer.credit"));
+  set("#footer-version", "Permavore " + (window.PERMAVORE_VERSION || "dev")
+    + (window.matchMedia("(display-mode: standalone)").matches ? " · " + t("footer.ecranaccueil") : ""));
   set("#label-ville", t("champ.ville.label"));
   set("#label-surface", t("champ.surface.label"));
   set("#label-zone", t("champ.zone.label"));

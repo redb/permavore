@@ -1,3 +1,4 @@
 .DS_Store
 .dev.vars
 .wrangler/
+version.js
