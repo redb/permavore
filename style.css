@@ -768,6 +768,12 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .plus-outils-grille button { min-height: 46px; }
 
 /* ---------- « À planter maintenant » domine ---------- */
+.section-titre .replier {
+  margin-left: auto; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--bord);
+  background: #fff; font-size: 18px; color: var(--vert-fonce); cursor: pointer; flex: none;
+}
+.section-maintenant.repliee .section-sous, .section-maintenant.repliee .grille-maintenant { display: none; }
+.section-maintenant.repliee { padding-bottom: 14px; }
 .section-maintenant {
   background: #fff; border: 1px solid #d6e7d9; border-radius: 20px;
   padding: 18px 16px 20px; box-shadow: var(--ombre);

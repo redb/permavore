@@ -525,6 +525,8 @@ const I18N = {
     en: "In ✏️ Draw mode, drag to trace a bed, then confirm with ✓ (or cancel with ✕). A simple tap proposes a 1 m² bed. In ✋ Move mode, scroll the plan freely. Tap a bed to plant something in it or delete it. Everything is saved automatically." },
   "plan.supprimee": { fr: "Planche supprimée.", en: "Bed deleted." },
   "plan.annuler.action": { fr: "Annuler", en: "Undo" },
+  "now.replier": { fr: "Replier", en: "Collapse" },
+  "now.deplier": { fr: "Déplier", en: "Expand" },
   "plan.retour": { fr: "← Retour", en: "← Back" },
   "plan.mode.deplacer": { fr: "✋ Déplacer", en: "✋ Move" },
   "plan.mode.dessiner": { fr: "✏️ Dessiner", en: "✏️ Draw" },

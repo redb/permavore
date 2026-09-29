@@ -29,6 +29,7 @@ const state = {
   projectionClimat: null,    // indicateurs Open-Meteo pour le point courant (session)
   objectifMasque: false,     // l'utilisateur a écarté la question (persisté)
   invitePlanMasquee: false,  // « Dessine ton jardin » écarté (persisté)
+  maintenantReplie: false,   // « À planter maintenant » replié (persisté)
   filtresOuverts: false,     // panneau de filtres déplié
 };
 
@@ -355,6 +356,7 @@ function chargerPreferencesJardin() {
     state.curseurNourricier = curseur(brut.curseurNourricier, 0.7);
     state.curseurExperimental = curseur(brut.curseurExperimental, 0.25);
     state.invitePlanMasquee = brut.invitePlanMasquee === true;
+    state.maintenantReplie = brut.maintenantReplie === true;
     // Coordonnées de la géolocalisation : sans elles, une position GPS dont la
     // commune n'a pas pu être nommée était perdue à la visite suivante.
     const c = brut.villeCoords;
@@ -385,6 +387,7 @@ function sauverPreferencesJardin() {
       curseurNourricier: state.curseurNourricier,
       curseurExperimental: state.curseurExperimental,
       invitePlanMasquee: state.invitePlanMasquee,
+      maintenantReplie: state.maintenantReplie,
     }));
   } catch (erreur) {
     journaliserAvertissement("preferences_jardin_echec", { message: erreur.message });
@@ -2355,6 +2358,20 @@ function init() {
     rendreInvitePlan();
   });
   $("#btn-modifier").addEventListener("click", deplier);
+  // « À planter maintenant » se replie d'une touche ; la pastille reste visible.
+  const appliquerRepli = () => {
+    $("#section-now").classList.toggle("repliee", state.maintenantReplie);
+    const b = $("#now-replier");
+    b.setAttribute("aria-expanded", String(!state.maintenantReplie));
+    b.textContent = state.maintenantReplie ? "▸" : "▾";
+    b.title = state.maintenantReplie ? t("now.deplier") : t("now.replier");
+  };
+  appliquerRepli();
+  $("#now-replier").addEventListener("click", () => {
+    state.maintenantReplie = !state.maintenantReplie;
+    sauverPreferencesJardin();
+    appliquerRepli();
+  });
   $("#surface").addEventListener("input", e => {
     const v = parseInt(e.target.value, 10);
     state.surface = (v && v > 0) ? v : null;
