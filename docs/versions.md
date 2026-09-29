@@ -19,6 +19,9 @@ plus rare. Le numéro reste `MAJEURE.MINEURE` (`package.json` : `version`,
 | 11 | Leontopodium | edelweiss | rochers d'altitude, protégée |
 | 12 | Cypripedium calceolus | sabot de Vénus | orchidée protégée, quelques stations |
 
+Règle : **une fonctionnalité ajoutée = un nouveau nom** (majeure suivante).
+Les corrections et ajustements restent dans la mineure (v1.1, v1.2…).
+
 Passage de version : modifier `version` et `codename` dans `package.json`,
 puis `npm run deploy`. Le commit et la date sont ajoutés automatiquement
 (`scripts/version.sh`) et visibles au survol du pied de page.
