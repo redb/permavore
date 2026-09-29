@@ -2204,6 +2204,9 @@ function traduireStatique() {
   set("#footer-marque", t("footer.marque"));
   set("#footer-note", t("footer.note"));
   set("#footer-credit", t("footer.credit"));
+  // Le numéro se lit ; le commit et la date restent dans le title (au survol).
+  const fv = $("#footer-version");
+  if (fv) fv.title = window.PERMAVORE_BUILD || "";
   set("#footer-version", (window.PERMAVORE_VERSION || "Permavore dev")
     + (window.matchMedia("(display-mode: standalone)").matches ? " · " + t("footer.ecranaccueil") : ""));
   set("#label-ville", t("champ.ville.label"));
