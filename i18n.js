@@ -298,6 +298,7 @@ const I18N = {
 
   // --- Enraciner : création d'une InstanceCulture dans le jardin (BDR-025)
   "enr.titre": { fr: "🌱 Enraciner", en: "Add to my garden" },
+  "enr.titre.deja": { fr: "🌱 Enracinée", en: "In my garden" },
   "enr.aide": { fr: "Enraciner — ajouter cette culture à ton jardin", en: "Add this crop to your garden" },
   "enr.etat.question": { fr: "Où en es-tu avec {nom} ?", en: "Where are you with {nom}?" },
   "enr.etat.prevu": { fr: "Prévu", en: "Planned" },

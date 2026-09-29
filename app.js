@@ -490,11 +490,14 @@ function ouvrirEnracinement(cultureId) {
   p.className = "enr-panneau";
   p.setAttribute("role", "dialog");
   p.setAttribute("aria-modal", "true");
-  p.setAttribute("aria-label", t("enr.titre"));
+  // Le titre dit l'état, pas l'action : « Enracinée » si la culture pousse
+  // déjà chez le jardinier, « Enraciner » sinon.
+  const titre = existantes.length ? t("enr.titre.deja") : t("enr.titre");
+  p.setAttribute("aria-label", titre);
   p.innerHTML = `
     <div class="enr-boite">
       <div class="enr-entete">
-        <strong>${t("enr.titre")}</strong>
+        <strong>${titre}</strong>
         <button type="button" class="enr-fermer" aria-label="${t("enr.fermer")}">✕</button>
       </div>
       ${premierEnracinement() ? `<p class="enr-aide">${t("enr.aide")}</p>` : ""}
@@ -1241,7 +1244,7 @@ function ouvrirModale(plante) {
     </div>
     <div class="modale-corps">
       <h2>${echapperHTML(plante.nom)}${plante.perso ? `<span class="tag-perso">${t("modale.ajouteeparToi")}</span>` : ""}${
-        plante.enracinee ? `<span class="tag-enracinee">${t("modale.enracinee")}</span>` : ""}</h2>
+        (plante.enracinee || estAdoptee(plante.id)) ? `<span class="tag-enracinee">${t("modale.enracinee")}</span>` : ""}</h2>
       <p class="latin">${echapperHTML(plante.latin)} — ${CATEGORIES[plante.cat].label}</p>
       <div class="modale-pictos">
         <span class="picto" title="${c.desc}">${c.picto} ${c.label}</span>
