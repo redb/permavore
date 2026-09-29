@@ -542,6 +542,16 @@ footer strong { color: var(--vert-fonce); }
   opacity: .55; transition: opacity .2s;
 }
 .plan-etat.flash { opacity: 1; }
+.plan-annulation {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 14px; padding: 10px 14px 10px 16px;
+  background: var(--vert-fonce); color: #fff; border-radius: 999px; box-shadow: var(--ombre-forte);
+  font-size: 14px; font-weight: 600; max-width: calc(100vw - 32px);
+}
+.plan-annulation button {
+  border: none; background: #fff; color: var(--vert-fonce); font-weight: 800;
+  padding: 8px 14px; border-radius: 999px; min-height: 36px; cursor: pointer;
+}
 .plan-grille[data-mode="deplacer"] { touch-action: pan-x pan-y; cursor: grab; }
 .plan-grille[data-mode="dessiner"] { touch-action: none; cursor: crosshair; }
 .plan-wrap {

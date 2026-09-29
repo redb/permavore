@@ -3392,6 +3392,17 @@ function ouvrirModaleTailleJardin() {
   document.body.style.overflow = "hidden";
 }
 
+/* ---------- Retour arrière : une suppression se rattrape pendant quelques secondes ---------- */
+function proposerAnnulation(texte, annuler) {
+  document.getElementById("plan-annulation")?.remove();
+  const b = el("div", "plan-annulation");
+  b.id = "plan-annulation";
+  b.innerHTML = `<span>${texte}</span><button type="button">${t("plan.annuler.action")}</button>`;
+  b.querySelector("button").addEventListener("click", () => { annuler(); b.remove(); });
+  document.body.appendChild(b);
+  setTimeout(() => b.remove(), 6000);
+}
+
 /* ---------- Dessin : le doigt dessine, puis une validation explicite crée la planche ---------- */
 function installerDessinPlan() {
   const g = $("#plan-grille");
@@ -3587,7 +3598,12 @@ function ouvrirModalePlanche(id) {
   modale.querySelector(".fermer").addEventListener("click", fermerModale);
   $("#pl-fermer").addEventListener("click", fermerModale);
   $("#pl-suppr").addEventListener("click", () => {
+    const copie = JSON.parse(JSON.stringify(p));
     supprimerPlanche(p.id); rendrePlan(); fermerModale();
+    proposerAnnulation(t("plan.supprimee"), () => {
+      if (!placeLibre(copie)) return;
+      jardin.planches.push(copie); sauverJardin(); rendrePlan();
+    });
   });
   const btnRec = $("#pl-recolte");
   if (btnRec) btnRec.addEventListener("click", () => {
