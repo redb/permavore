@@ -80,9 +80,37 @@ function profilSousEnvironnement(profilLieu, env) {
   return { profil, connu: true, raison: null };
 }
 
+/* ---------- Doctrine abris (docs/doctrine-abris.md) ----------
+   Un abri NON chauffé vaut un cran vers le chaud sur l'échelle des zones.
+   Un abri imbriqué (proprietes.imbrique === true) en vaut un de plus.
+   Les abris chauffés et l'intérieur n'ont pas de calendrier : null. */
+const ECHELLE_ZONES = ["montagne", "continental", "tempere", "oceanique", "mediterraneen"];
+
+function cransAbri(env) {
+  if (!env || !ENVIRONNEMENTS[env.type]) return 0;
+  const e = ENVIRONNEMENTS[env.type];
+  if (!e.protege) return 0;
+  if (e.chauffe) return null;
+  return 1 + (env.proprietes && env.proprietes.imbrique === true ? 1 : 0);
+}
+
+/**
+ * Zone climatique interne effective d'une culture.
+ * Renvoie { zone, crans, chauffe } ; `zone` = zone d'accueil décalée, plafonnée
+ * à « mediterraneen » ; `chauffe` = true → pas de calendrier à afficher.
+ */
+function zoneEffective(zoneAccueil, env) {
+  const i = ECHELLE_ZONES.indexOf(zoneAccueil);
+  const base = i >= 0 ? i : ECHELLE_ZONES.indexOf("tempere");
+  const crans = cransAbri(env);
+  if (crans === null) return { zone: ECHELLE_ZONES[base], crans: 0, chauffe: true };
+  const j = Math.min(ECHELLE_ZONES.length - 1, base + crans);
+  return { zone: ECHELLE_ZONES[j], crans: j - base, chauffe: false };
+}
+
 if (typeof window !== "undefined") {
   window.Environnements = {
     ENVIRONNEMENTS, environnementCulture, profilSousEnvironnement,
-    types: Object.keys(ENVIRONNEMENTS),
+    types: Object.keys(ENVIRONNEMENTS), ECHELLE_ZONES, cransAbri, zoneEffective,
   };
 }

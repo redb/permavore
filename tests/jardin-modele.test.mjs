@@ -156,3 +156,17 @@ test("les anciennes planches se convertissent en cellules sans rien inventer", (
   assert.equal(anciennes[0].plantId, "tomate");
   assert.equal(anciennes[0].w, 2);
 });
+
+test("doctrine abris : un cran vers le chaud, plafonné, chauffé hors calendrier", () => {
+  const w = sandbox();
+  const E = w.Environnements;
+  assert.equal(E.zoneEffective("continental", { type: "pleine_terre" }).zone, "continental");
+  const r = E.zoneEffective("continental", { type: "serre_froide" });
+  assert.equal(r.zone, "tempere"); assert.equal(r.crans, 1); assert.equal(r.chauffe, false);
+  assert.equal(E.zoneEffective("tempere", { type: "tunnel", proprietes: { imbrique: true } }).zone, "mediterraneen");
+  assert.equal(E.zoneEffective("oceanique", { type: "tunnel", proprietes: { imbrique: true } }).crans, 1, "plafonné");
+  assert.equal(E.zoneEffective("mediterraneen", { type: "veranda" }).crans, 0);
+  assert.equal(E.zoneEffective("tempere", { type: "serre_chauffee" }).chauffe, true);
+  assert.equal(E.zoneEffective("tempere", { type: "interieur" }).chauffe, true);
+  assert.equal(E.zoneEffective("inconnue", { type: "pot_mobile" }).zone, "oceanique");
+});
