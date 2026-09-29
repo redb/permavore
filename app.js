@@ -3394,6 +3394,38 @@ function ouvrirModaleTailleJardin() {
 }
 
 /* ---------- Retour arrière : une suppression se rattrape pendant quelques secondes ---------- */
+/* Nouvelle zone de culture : un nom et un environnement, rien d'autre. */
+function ouvrirNouvelleZone(apres) {
+  const modale = $("#modale");
+  const types = window.Environnements.types;
+  modale.innerHTML = `
+    <button class="fermer" aria-label="Fermer">×</button>
+    <div class="form-ajout">
+      <h2>${t("zone.nouvelle.titre")}</h2>
+      <div class="fgrid">
+        <div class="fchamp"><label for="nz-nom">${t("zone.nom")}</label>
+          <input id="nz-nom" type="text" maxlength="60" /></div>
+        <div class="fchamp"><label for="nz-env">${t("enr.ou")}</label>
+          <select id="nz-env">${types.map(e => `<option value="${e}">${t("env." + e)}</option>`).join("")}</select></div>
+      </div>
+      <div class="form-actions">
+        <button class="btn secondaire" id="nz-annuler">${t("form.annuler")}</button>
+        <button class="btn" id="nz-ok">${t("enr.valider.zone")}</button>
+      </div>
+    </div>`;
+  const clore = (z) => { fermerModale(); apres(z); };
+  modale.querySelector(".fermer").addEventListener("click", () => clore(null));
+  $("#nz-annuler").addEventListener("click", () => clore(null));
+  $("#nz-ok").addEventListener("click", () => {
+    const env = $("#nz-env").value;
+    const nom = $("#nz-nom").value.trim() || t("env." + env);
+    clore(window.Instances.definirZone(null, { nom, environnement: env }));
+  });
+  $("#overlay").classList.add("ouvert");
+  document.body.style.overflow = "hidden";
+  $("#nz-nom").focus();
+}
+
 function proposerAnnulation(texte, annuler) {
   document.getElementById("plan-annulation")?.remove();
   const b = el("div", "plan-annulation");
@@ -3408,7 +3440,7 @@ function proposerAnnulation(texte, annuler) {
 function installerDessinPlan() {
   const g = $("#plan-grille");
   if (!g) return;
-  let depart = null, apercu = null, actions = null, rectAttente = null;
+  let depart = null, apercu = null, actions = null, rectAttente = null, dernierZoneChoisie = null;
 
   // Deux modes au doigt : Déplacer (le plan défile, rien ne se dessine) et
   // Dessiner. Sans cela, sur téléphone, tout contact dessinait et un plan plus
@@ -3480,10 +3512,25 @@ function installerDessinPlan() {
     actions = el("div", "plan-valider-actions");
     actions.innerHTML = `
       <button type="button" class="annuler" aria-label="${t("plan.anneuler")}">✕</button>
+      <select class="zone-choix" aria-label="${t("plan.zone")}"></select>
       <button type="button" class="valider" aria-label="${t("plan.valider")}">✓</button>`;
     g.appendChild(actions);
+    const selZone = actions.querySelector(".zone-choix");
+    const remplirZones = (choisie) => {
+      const zs = window.Instances.zones();
+      selZone.innerHTML = `<option value="">${t("plan.zone.aucune")}</option>`
+        + zs.map(z => `<option value="${echapperHTML(z.id)}">${echapperHTML(z.nom || t("env." + (z.environnement || "pleine_terre")))}</option>`).join("")
+        + `<option value="__nouvelle">${t("plan.zone.nouvelle")}</option>`;
+      selZone.value = choisie || "";
+    };
+    remplirZones(dernierZoneChoisie);
+    selZone.addEventListener("change", () => {
+      if (selZone.value !== "__nouvelle") { dernierZoneChoisie = selZone.value || null; return; }
+      ouvrirNouvelleZone((z) => { dernierZoneChoisie = z ? z.id : dernierZoneChoisie; remplirZones(dernierZoneChoisie); });
+      remplirZones(dernierZoneChoisie);
+    });
 
-    const largeur = 2 * 44 + 8;
+    const largeur = 2 * 44 + 2 * 8 + 170;
     let left = r.x * TAILLE_CASE_PX;
     left = Math.max(0, Math.min(left, jardin.cols * TAILLE_CASE_PX - largeur));
     const dessousOk = (r.y + r.h) * TAILLE_CASE_PX + 52 <= jardin.lignes * TAILLE_CASE_PX;
@@ -3497,7 +3544,7 @@ function installerDessinPlan() {
         ouvrirMessage(t("plan.occupe.titre"), t("plan.occupe.msg"));
         return;
       }
-      const nouvelle = creerPlanche(rectAttente.x, rectAttente.y, rectAttente.w, rectAttente.h);
+      const nouvelle = creerPlanche(rectAttente.x, rectAttente.y, rectAttente.w, rectAttente.h, selZone.value && selZone.value !== "__nouvelle" ? selZone.value : null);
       retirerApercu();
       rendrePlan();
       if (nouvelle) ouvrirModalePlanche(nouvelle.id);

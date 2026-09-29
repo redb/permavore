@@ -125,12 +125,13 @@ function placeLibre(rect, saufId) {
   return !jardin.planches.some(p => p.id !== saufId && chevauche(rect, p));
 }
 
-function creerPlanche(x, y, w, h) {
+function creerPlanche(x, y, w, h, zoneId = null) {
   const rect = { x, y, w, h };
   if (!placeLibre(rect)) return null;
   const p = {
     id: `pl-${Date.now().toString(36)}-${Math.floor(x)}-${Math.floor(y)}`,
     x, y, w, h,
+    zoneId: zoneId || null, // zone de culture (Instances.zone) ; null = pleine terre par défaut
     plantId: null,      // culture en place
     dateSemis: null,
     historique: [],     // [{plantId, famille, type, annee}] du plus ancien au plus récent
