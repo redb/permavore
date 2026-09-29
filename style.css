@@ -190,7 +190,9 @@ body.configure .filtres { margin-top: 16px; }
 .fchamp.inline input { width: auto; }
 .form-actions {
   display: flex; gap: 10px; margin-top: 18px;
-  position: sticky; bottom: 0; padding: 12px 0 4px; background: var(--sable);
+  position: sticky; bottom: 0; background: var(--sable);
+  /* Sous la barre d'accueil iPhone (app écran d'accueil) : le bouton restait caché. */
+  padding: 12px 0 calc(4px + env(safe-area-inset-bottom, 0px));
 }
 .form-actions .btn { flex: 1; min-height: 44px; }
 .form-erreur {
@@ -433,7 +435,7 @@ body.configure .filtres { margin-top: 16px; }
 
 @media (max-width: 620px) {
   .overlay { padding: 8px; }
-  .modale { max-height: calc(100dvh - 16px); border-radius: 16px; }
+  .modale { max-height: calc(100dvh - 16px - env(safe-area-inset-bottom, 0px)); border-radius: 16px; }
   .form-ajout { padding: 18px 16px 20px; }
   .fgrid { grid-template-columns: minmax(0, 1fr); }
   .fgrid .full { grid-column: auto; }

@@ -1778,9 +1778,39 @@ function planteVisible(p) {
     const q = normaliseVille(state.recherche);
     const cible = normaliseVille(txt(p.nom) + " " + p.latin
       + (typeof p.nom === "object" && p.nom && "en" in p.nom ? " " + p.nom.en : ""));
-    if (!cible.includes(q)) return false;
+    if (!correspondFlou(q, cible)) return false;
   }
   return true;
+}
+
+// Recherche tolérante : « chaiotte » doit trouver « chayotte », « tomatte »
+// « tomate ». Inclusion stricte d'abord ; sinon, chaque mot de la cible est
+// comparé au terme saisi (ou à son début) avec une distance d'édition bornée :
+// une faute pour 4 à 6 lettres, deux à partir de 7. En dessous de 4 lettres,
+// on reste strict, sinon tout se ressemble.
+function distanceEdition(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function correspondFlou(q, cible) {
+  if (cible.includes(q)) return true;
+  const termes = q.split(/\s+/).filter(Boolean);
+  const mots = cible.split(/[^a-z0-9]+/).filter(Boolean);
+  return termes.every(terme => {
+    if (terme.length < 4) return mots.some(m => m.startsWith(terme));
+    const tol = terme.length >= 7 ? 2 : 1;
+    return mots.some(m => distanceEdition(terme, m) <= tol
+      || distanceEdition(terme, m.slice(0, terme.length)) <= tol);
+  });
 }
 
 // ---------- Rendu principal ----------
