@@ -748,8 +748,16 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .panneau-filtres .filtres { margin: 0; padding: 0; flex: 1; }
 .plus-outils { max-width: 1080px; margin: 10px auto 0; padding: 0 16px; }
 .plus-outils summary {
-  cursor: pointer; list-style: none; font-size: 14px; font-weight: 700; color: var(--texte-doux);
-  padding: 8px 0; display: inline-block;
+  cursor: pointer; list-style: none; font-size: 17px; font-weight: 800; color: var(--vert-fonce);
+  padding: 12px 16px; min-height: 48px; display: flex; align-items: center; gap: 8px;
+  background: var(--carte); border: 1px solid var(--bord); border-radius: var(--radius);
+  box-shadow: var(--ombre);
+}
+.plus-outils summary::after { margin-left: auto; }
+.plus-outils[open] summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.plus-outils[open] .plus-outils-grille {
+  background: var(--carte); border: 1px solid var(--bord); border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius); padding: 10px 12px 12px;
 }
 .plus-outils summary::-webkit-details-marker { display: none; }
 .plus-outils summary::after { content: " ▸"; }
