@@ -523,12 +523,33 @@ footer strong { color: var(--vert-fonce); }
 .assoc-nouvelle { border-style: dashed; border-color: var(--vert); color: var(--vert-fonce); font-weight: 700; }
 
 /* ---------- Plan du jardin ---------- */
+/* Barre d'outils collante : sur téléphone, la grille remplit l'écran et l'on
+   perdait de vue comment revenir en arrière ou si le plan était enregistré. */
+.plan-outils {
+  position: sticky; top: 6px; z-index: 7; display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; padding: 8px; margin-bottom: 10px; background: var(--carte);
+  border: 1px solid var(--bord); border-radius: var(--radius); box-shadow: var(--ombre);
+}
+.plan-outils .btn { padding: 8px 12px; min-height: 40px; }
+.plan-mode { display: flex; border: 1px solid var(--bord); border-radius: 999px; overflow: hidden; }
+.plan-mode button {
+  border: none; background: transparent; padding: 8px 12px; min-height: 40px;
+  font-weight: 700; color: var(--texte-doux); cursor: pointer;
+}
+.plan-mode button[aria-pressed="true"] { background: var(--vert-fonce); color: #fff; }
+.plan-etat {
+  margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--vert-fonce);
+  opacity: .55; transition: opacity .2s;
+}
+.plan-etat.flash { opacity: 1; }
+.plan-grille[data-mode="deplacer"] { touch-action: pan-x pan-y; cursor: grab; }
+.plan-grille[data-mode="dessiner"] { touch-action: none; cursor: crosshair; }
 .plan-wrap {
   overflow: auto; border: 1px solid var(--bord); border-radius: var(--radius);
   background: #fbf9f4; box-shadow: var(--ombre); padding: 10px;
 }
 .plan-grille {
-  position: relative; display: grid; touch-action: none; user-select: none;
+  position: relative; display: grid; user-select: none;
   margin: 0 auto; background:
     repeating-linear-gradient(0deg,  #e6e0d2 0 1px, transparent 1px var(--maille)),
     repeating-linear-gradient(90deg, #e6e0d2 0 1px, transparent 1px var(--maille));

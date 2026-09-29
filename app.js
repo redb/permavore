@@ -2206,6 +2206,10 @@ function traduireStatique() {
   set("#label-zone", t("champ.zone.label"));
   set("#plan-titre", t("plan.titre"));
   set("#plan-aide", t("plan.aide"));
+  set("#btn-plan-retour", t("plan.retour"));
+  set("#mode-deplacer", t("plan.mode.deplacer"));
+  set("#mode-dessiner", t("plan.mode.dessiner"));
+  set("#plan-etat", t("plan.enregistre"));
   set("#etapes-titre", t("etapes.titre"));
   set("#etapes-sous", t("etapes.sous"));
   set("#now-titre", t("now.titre"));
@@ -3391,6 +3395,38 @@ function installerDessinPlan() {
   if (!g) return;
   let depart = null, apercu = null, actions = null, rectAttente = null;
 
+  // Deux modes au doigt : Déplacer (le plan défile, rien ne se dessine) et
+  // Dessiner. Sans cela, sur téléphone, tout contact dessinait et un plan plus
+  // large que l'écran devenait impossible à parcourir. La souris dessine toujours.
+  const tactile = window.matchMedia("(pointer: coarse)").matches;
+  let mode = tactile ? "deplacer" : "dessiner";
+  function appliquerMode(m) {
+    mode = m;
+    g.dataset.mode = m;
+    $("#mode-deplacer").setAttribute("aria-pressed", String(m === "deplacer"));
+    $("#mode-dessiner").setAttribute("aria-pressed", String(m === "dessiner"));
+  }
+  appliquerMode(mode);
+  $("#mode-deplacer").addEventListener("click", () => appliquerMode("deplacer"));
+  $("#mode-dessiner").addEventListener("click", () => appliquerMode("dessiner"));
+  $("#btn-plan-retour").addEventListener("click", () => {
+    retirerApercu();
+    basculerPlan();
+    $("#btn-plan").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+
+  // Chaque écriture du plan fait clignoter « Enregistré ✓ » : l'enregistrement
+  // est automatique, mais il doit se voir.
+  const sauverOrigine = sauverJardin;
+  sauverJardin = function () {
+    sauverOrigine.apply(this, arguments);
+    const e = $("#plan-etat");
+    if (!e) return;
+    e.classList.add("flash");
+    clearTimeout(e._t);
+    e._t = setTimeout(() => e.classList.remove("flash"), 1500);
+  };
+
   const caseDepuisEvent = e => {
     const r = g.getBoundingClientRect();
     return {
@@ -3455,6 +3491,8 @@ function installerDessinPlan() {
 
   g.addEventListener("pointerdown", e => {
     if (rectAttente) return;                       // une planche attend déjà d'être validée
+    if (mode === "deplacer" && e.pointerType !== "mouse") return;   // le doigt fait défiler
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     const surPlanche = e.target.closest("[data-planche]");
     if (surPlanche) return;                       // clic sur une planche : géré ailleurs
     depart = caseDepuisEvent(e);
