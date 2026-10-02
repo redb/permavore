@@ -856,6 +856,24 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .pq-phrase { margin: 0 0 10px; font-size: 15.5px; font-weight: 600; color: var(--vert-fonce); }
 .pq-frileuse { margin: -4px 0 10px; font-size: 14px; color: #8a5d10; }
 .pq-note { margin: 10px 0 0; font-size: 12.5px; color: var(--texte-doux); }
+/* Cartouche météo : sept colonnes, lisibles au doigt, sans graphique */
+.meteo { margin-top: 12px; }
+.meteo-titre { font-size: 13px; font-weight: 700; color: var(--vert-fonce); margin-bottom: 6px; }
+.meteo-jours { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.meteo-jour {
+  display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 0 4px;
+  background: #fff; border: 1px solid var(--bord); border-radius: 10px; font-size: 12px; line-height: 1.2;
+}
+.meteo-jour.gel { border-color: #7fa8d8; background: #eef4fb; }
+.meteo-jour.chaud { border-color: #e0a04a; background: #fff4e3; }
+.mj-date { font-size: 10.5px; color: var(--texte-doux); text-transform: capitalize; white-space: nowrap; }
+.mj-max { font-weight: 800; }
+.mj-min { color: var(--texte-doux); }
+.mj-pluie { min-height: 14px; font-size: 11px; }
+.meteo-verdict { margin: 8px 0 0; font-size: 14px; font-weight: 600; padding: 8px 10px; border-radius: 10px; }
+.meteo-verdict.ok { background: var(--vert-clair); color: var(--vert-fonce); }
+.meteo-verdict.prudence { background: #fff4e3; color: #8a5d10; }
+.meteo-verdict.alerte { background: #eef4fb; color: #2b4f80; }
 
 /* Barre repliée : une seule ligne sur mobile (elle reste collée en haut) */
 @media (max-width: 620px) {

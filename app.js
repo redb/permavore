@@ -2142,6 +2142,8 @@ async function commit(e) {
 
 function afficherResultats() {
   document.body.classList.add("resultats");
+  // Prévisions préchargées une fois par maille : la fiche les a sous la main.
+  if (state.villeCoords && window.Previsions) window.Previsions.charger(state.villeCoords.lat, state.villeCoords.lng);
   replier();
   rendre();
 }
@@ -2703,7 +2705,46 @@ function pourquoiHTML(plante, statut) {
           <span class="k">${t("pq.row.exposition")}</span><span class="v">${sol.picto} ${sol.label}</span>
         </div>
         ${atouts ? `<div class="atouts" style="margin-top:10px">${atouts}</div>` : ""}
-        <p class="pq-note">${t("pq.note")}</p>
+        <div id="pq-meteo">${meteoHTML(plante, statut)}</div>
+      </div>`;
+}
+
+/* ---------- Prévisions à 7 jours dans la fiche -------------------------------
+   Le calendrier dit « maintenant » ; la météo dit si c'est vraiment le moment.
+   Sans coordonnées ni réseau, on garde la note générique : jamais d'invention. */
+function meteoHTML(plante, statut) {
+  const c = state.villeCoords;
+  const prev = (c && window.Previsions) ? window.Previsions.connues(c.lat, c.lng) : null;
+  if (!prev) {
+    if (c && window.Previsions) {
+      window.Previsions.charger(c.lat, c.lng).then(p => {
+        if (!p || state.planteOuverte !== plante) return;
+        const bloc = document.querySelector("#pq-meteo");
+        if (bloc) bloc.innerHTML = meteoHTML(plante, statut);
+      });
+    }
+    return `<p class="pq-note">${t("pq.note")}</p>`;
+  }
+  const v = window.Previsions.verdict(plante, prev, statut);
+  const sig = window.Previsions.signaux(prev);
+  const jourCourt = iso => new Date(iso + "T12:00:00").toLocaleDateString(localeCourante(), { weekday: "short", day: "numeric" });
+  const jours = prev.jours.map(j => `
+      <div class="meteo-jour${j.tmin <= 0 ? " gel" : ""}${j.tmax >= 32 ? " chaud" : ""}">
+        <span class="mj-date">${jourCourt(j.date)}</span>
+        <span class="mj-max">${Math.round(j.tmax)}°</span>
+        <span class="mj-min">${Math.round(j.tmin)}°</span>
+        <span class="mj-pluie">${j.pluie >= 5 ? "💧" : j.tmin <= 0 ? "❄️" : ""}</span>
+      </div>`).join("");
+  const parJour = v.jour ? { jour: jourCourt(v.jour.date), tmin: Math.round(v.jour.tmin), tmax: Math.round(v.jour.tmax) } : {};
+  const verdictTexte = v.code === "rien" ? t("meteo.rien", { n: sig.horizonJours })
+    : v.code === "inconnu" ? "" : t("meteo." + v.code, parJour);
+  const classe = v.code === "attendre_gel" ? "alerte" : v.code === "rien" ? "ok" : "prudence";
+  return `
+      <div class="meteo">
+        <div class="meteo-titre">${t("meteo.titre", { n: sig.horizonJours })}</div>
+        <div class="meteo-jours">${jours}</div>
+        ${verdictTexte ? `<p class="meteo-verdict ${classe}">${verdictTexte}</p>` : ""}
+        <p class="pq-note">${t("meteo.note")}</p>
       </div>`;
 }
 

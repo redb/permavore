@@ -41,6 +41,7 @@ export const CLES_JARDIN = {
   // Confort local : reconstructible, donc jamais exporté ni restauré.
   "permavore.lang":         { nom: "langue",       metier: false },
   "permavore.photos.v1":    { nom: "cachePhotos",  metier: false },
+  "permavore.previsions.v1": { nom: "cachePrevisions", metier: false },
   // Reliquat : le cache climatique vit désormais dans IndexedDB (magasin
   // « climat »). La clé reste listée pour être purgée, jamais exportée.
   "permavore.climat.v2":    { nom: "cacheClimatObsolete", metier: false, obsolete: true },
