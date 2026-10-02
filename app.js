@@ -284,6 +284,11 @@ function prochainesEtapes(horizonJours = 90) {
 function dateSemisPlante(id) {
   return state.dates[id] || "";
 }
+function coordonneesJardin() {
+  const lieu = state.villeCoords;
+  return lieu && Number.isFinite(lieu.lat) && Number.isFinite(lieu.lng)
+    ? { lat: lieu.lat, lng: lieu.lng } : null;
+}
 function zoneCourante() {
   return state.zone;
 }
@@ -2294,7 +2299,16 @@ function traduireStatique() {
 }
 
 // ---------- Init ----------
-function init() {
+async function init() {
+  // Aucun chargement ni écriture par défaut avant la récupération durable.
+  const { demarrerSauvegarde } = await import("./sauvegarde.js");
+  await demarrerSauvegarde();
+  // Ces modèles ont été lus à l’évaluation des scripts classiques.
+  chargerInstances();
+  chargerZones();
+  chargerOccupations();
+  chargerExperiences();
+  document.dispatchEvent(new CustomEvent("jardin:recupere"));
   traduireStatique();
   construireSelecteurLangue();
 

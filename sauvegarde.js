@@ -91,12 +91,25 @@ export async function restaurerJardin(fichier, confirmer) {
   const idFilet = await sauvegardeSecurite("avant-restauration").catch(() => null);
 
   const cible = etatDepuisExport(fichier);
+  const photosAttendues = Array.isArray(fichier.sachets) ? fichier.sachets : [];
+  let photosVerifiees = 0;
   try {
     appliquerVersLocalStorage(cible);
     await ecrireEtat(cible).catch(() => null);
     // Photos de sachets : restaurées aussi, sinon le jardinier perd ses clichés.
     if (Array.isArray(fichier.sachets) && fichier.sachets.length) {
-      await ecrireSachets(fichier.sachets).catch(() => 0);
+      const ecrites = await ecrireSachets(photosAttendues).catch(() => 0);
+      const relues = await lireSachets().catch(() => []);
+      // Comparer le contenu, pas seulement le nombre ou les identifiants.
+      const canonique = valeur => JSON.stringify(valeur, (_, v) =>
+        v && typeof v === "object" && !Array.isArray(v)
+          ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+      const parId = new Map(relues.map(photo => [photo.id, photo]));
+      photosVerifiees = new Set(photosAttendues.filter(photo =>
+        photo && photo.id && parId.has(photo.id)
+        && canonique(photo) === canonique(parId.get(photo.id))
+      ).map(photo => photo.id)).size;
+      if (ecrites !== photosAttendues.length) photosVerifiees = 0;
     }
   } catch (e) {
     await rembobiner(avant, idFilet);
@@ -112,12 +125,21 @@ export async function restaurerJardin(fichier, confirmer) {
     return { ok: false, etape: "integrite", differences: controle.differences };
   }
 
+  if (photosVerifiees !== photosAttendues.length) {
+    // Le jardin est restauré, mais on ne prétend pas que les photos le sont.
+    // Ne pas annoncer un retour à l’ancien jardin : les photos ont pu être fusionnées.
+    try { localStorage.removeItem(CLE_RECU); } catch { /* stockage refusé */ }
+    return { ok: false, etape: "photos", incomplet: true,
+      photosAttendues: photosAttendues.length, photosVerifiees,
+      sauvegardePrecedente: idFilet };
+  }
+
   // Reçu écrit AVANT le rechargement : c'est ce qui permettra de confirmer au
   // jardinier, une fois la page revenue, que son jardin est bien là. Les
   // nombres viennent de l'état relu, pas du fichier.
   const recu = recuRestauration(relu, {
     verifie: true,
-    photos: Array.isArray(fichier.sachets) ? fichier.sachets.length : 0,
+    photos: photosVerifiees,
     sauvegardeDu: validation.resume?.exportedAt || null,
   });
   try { localStorage.setItem(CLE_RECU, JSON.stringify(recu)); } catch { /* sans gravité */ }
@@ -135,7 +157,14 @@ async function rembobiner(avant, idFilet) {
 
 /* ---------- démarrage ------------------------------------------------------ */
 
-export async function demarrerSauvegarde() {
+let demarrage = null;
+export function demarrerSauvegarde() {
+  // init() et l’interface attendent la même récupération, sans double démarrage.
+  if (!demarrage) demarrage = initialiserSauvegarde();
+  return demarrage;
+}
+
+async function initialiserSauvegarde() {
   etatStockage.resultat = await initialiserStockage().catch(
     (e) => ({ ok: false, raison: "exception", message: e && e.message }));
   etatStockage.pret = true;
@@ -288,6 +317,8 @@ export function ouvrirPanneauSauvegarde() {
     if (resultat.ok) {
       message.textContent = tr("sauv.restaure");
       setTimeout(() => { fermer(); location.reload(); }, 1200);
+    } else if (resultat.etape === "photos") {
+      message.textContent = tr("sauv.photosIncompletes");
     } else if (resultat.etape === "annule") {
       message.textContent = tr("sauv.annule");
     } else if (resultat.etape === "validation") {
@@ -496,7 +527,8 @@ function afficherPanneauReprise(fichier, validation, champ, surSucces) {
       if (typeof surSucces === "function") surSucces(r);
       setTimeout(() => location.reload(), 1000);
     } else {
-      message.textContent = r.etape === "integrite"
+      message.textContent = r.etape === "photos" ? tr("sauv.photosIncompletes")
+        : r.etape === "integrite"
         ? tr("reprise.echecIntegrite") : tr("sauv.echecRestauration");
     }
   });
@@ -562,15 +594,14 @@ window.Sauvegarde.reprendre = reprendreJardinDepuisFichier;
 window.Sauvegarde.jardinPresent = jardinPresent;
 window.Sauvegarde.recu = afficherRecuRestauration;
 window.Sauvegarde.secours = Secours;
-document.addEventListener("DOMContentLoaded", () => {
+async function brancherSauvegarde() {
+  await demarrerSauvegarde();
   document.getElementById("btn-sauvegarde")?.addEventListener("click", ouvrirPanneauSauvegarde);
   brancherRepriseAccueil();
   afficherRecuRestauration();
-  demarrerSauvegarde();
-});
-if (document.readyState !== "loading") {
-  document.getElementById("btn-sauvegarde")?.addEventListener("click", ouvrirPanneauSauvegarde);
-  brancherRepriseAccueil();
-  afficherRecuRestauration();
-  demarrerSauvegarde();
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", brancherSauvegarde, { once: true });
+} else {
+  brancherSauvegarde();
 }
