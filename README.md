@@ -146,6 +146,7 @@ Idées d'industrialisation : import d'un CSV/JSON, ou petit script qui pré-remp
 ## Liens sponsorisés
 
 > Désactivés tant que `MONETISATION_ACTIVE = false` (voir « Licences et crédits »).
+> Pistes de partenaires : `docs/partenaires-futurs.md`.
 
 Trois niveaux, dans `data.js` (par priorité) :
 
