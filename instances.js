@@ -325,12 +325,15 @@ function deraciner(id) {
  * l'instance. Une annuelle récoltée est terminée (elle libère la place) ;
  * une vivace reste en place et accumule ses récoltes d'une année sur l'autre.
  */
-function recolter(id, dateISO, { terminer = true } = {}) {
+function recolter(id, dateISO, { terminer = true, aProduit = true, cause = null } = {}) {
   const i = INSTANCES.find(x => x.id === id);
   if (!i) return null;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateISO || "") ? dateISO : new Date().toISOString().slice(0, 10);
   i.recoltes = Array.isArray(i.recoltes) ? i.recoltes : [];
-  i.recoltes.push(date);
+  // Un échec est une donnée, pas un oubli : on garde la cause déclarée.
+  const entree = { date, aProduit: aProduit !== false };
+  if (!entree.aProduit) entree.cause = (typeof cause === "string" && cause.trim()) ? cause.trim().slice(0, 120) : null;
+  i.recoltes.push(entree);
   if (terminer) { i.etat = "termine"; i.fin = date; }
   i.maj = new Date().toISOString();
   sauverInstances();

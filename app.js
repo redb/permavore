@@ -512,9 +512,16 @@ function ouvrirEnracinement(cultureId) {
           <div class="enr-recolte" data-pour="${i.id}" hidden>
             <label class="enr-label" for="enr-recolte-${i.id}">${t("enr.recolte.date")}</label>
             <input type="date" id="enr-recolte-${i.id}" value="${dateISOAujourdhui()}" max="${dateISOAujourdhui()}" />
+            <label class="enr-recolte-echec"><input type="checkbox" id="enr-echec-${i.id}" /> ${t("enr.recolte.echec")}</label>
+            <input type="text" id="enr-cause-${i.id}" class="enr-recolte-cause" list="enr-causes" maxlength="120"
+              placeholder="${t("enr.recolte.cause")}" hidden />
             <button type="button" class="btn-principal enr-recolte-ok" data-instance="${i.id}">${t("enr.recolte.valider")}</button>
           </div>
-        </div>`).join("")}</div>` : ""}
+        </div>`).join("")}
+        <datalist id="enr-causes">
+          ${["gel", "secheresse", "ravageurs", "maladie", "levee", "pollinisation", "ombre", "oubli"]
+            .map(c => `<option value="${t("enr.cause." + c)}"></option>`).join("")}
+        </datalist></div>` : ""}
       <p class="enr-question">${t("enr.etat.question", { nom })}</p>
       <div class="enr-chips" id="enr-etats">
         ${ETATS_PROPOSES.map(e => `<button type="button" class="enr-chip" data-etat="${e}">${t("enr.etat." + e)}</button>`).join("")}
@@ -561,11 +568,21 @@ function ouvrirEnracinement(cultureId) {
     f.hidden = !f.hidden;
     if (!f.hidden) f.querySelector("input")?.focus();
   }));
+  p.querySelectorAll(".enr-recolte-echec input").forEach(c => c.addEventListener("change", () => {
+    const champ = c.closest(".enr-recolte").querySelector(".enr-recolte-cause");
+    champ.hidden = !c.checked;
+    if (c.checked) champ.focus();
+  }));
   p.querySelectorAll(".enr-recolte-ok").forEach(b => b.addEventListener("click", () => {
     const id = b.dataset.instance;
     const date = p.querySelector(`#enr-recolte-${id}`)?.value || dateISOAujourdhui();
-    // Une vivace se récolte sans disparaître du jardin.
-    window.Instances.recolter(id, date, { terminer: plante.cycle !== "vivace" });
+    const echec = p.querySelector(`#enr-echec-${id}`)?.checked;
+    // Une vivace se récolte (ou rate une saison) sans disparaître du jardin.
+    window.Instances.recolter(id, date, {
+      terminer: plante.cycle !== "vivace",
+      aProduit: !echec,
+      cause: echec ? p.querySelector(`#enr-cause-${id}`)?.value : null,
+    });
     synchroniserDepuisInstances();
     fermer(); rendre();
   }));
