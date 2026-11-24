@@ -516,6 +516,7 @@ function ouvrirEnracinement(cultureId) {
             <input type="text" id="enr-cause-${i.id}" class="enr-recolte-cause" list="enr-causes" maxlength="120"
               placeholder="${t("enr.recolte.cause")}" hidden />
             <button type="button" class="btn-principal enr-recolte-ok" data-instance="${i.id}">${t("enr.recolte.valider")}</button>
+            <button type="button" class="enr-supprimer" data-instance="${i.id}">${t("enr.deraciner")}</button>
           </div>
         </div>`).join("")}
         <datalist id="enr-causes">
@@ -567,6 +568,13 @@ function ouvrirEnracinement(cultureId) {
     const f = p.querySelector(`.enr-recolte[data-pour="${b.dataset.instance}"]`);
     f.hidden = !f.hidden;
     if (!f.hidden) f.querySelector("input")?.focus();
+  }));
+  // Retirer = effacer une saisie erronée, sans trace dans l'historique.
+  p.querySelectorAll(".enr-supprimer").forEach(b => b.addEventListener("click", () => {
+    if (!confirm(t("enr.deraciner.confirmer"))) return;
+    window.Instances.deraciner(b.dataset.instance);
+    synchroniserDepuisInstances();
+    fermer(); rendre();
   }));
   p.querySelectorAll(".enr-recolte-echec input").forEach(c => c.addEventListener("change", () => {
     const champ = c.closest(".enr-recolte").querySelector(".enr-recolte-cause");

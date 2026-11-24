@@ -1018,6 +1018,7 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .enr-recolte-echec{flex-basis:100%;display:flex;align-items:center;gap:.4rem;font-size:.9rem}
 .enr-boite .enr-recolte-echec input{width:auto;min-height:0}
 .enr-recolte-cause{flex-basis:100%}
+.enr-recolte .enr-supprimer{flex-basis:100%;text-align:left;margin-top:.3rem}
 .enr-supprimer{border:none;background:none;color:#a4452c;cursor:pointer;
   font:inherit;font-size:.85rem;text-decoration:underline}
 @media (max-width:480px){
