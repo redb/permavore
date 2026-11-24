@@ -1009,8 +1009,12 @@ body:not(.resultats) .resultats-seulement { display: none !important; }
 .enr-boite input{width:100%;border:1px solid rgba(0,0,0,.2);border-radius:8px;
   padding:.5rem;font:inherit;background:#fff;min-height:40px}
 .enr-existantes{background:rgba(0,0,0,.04);border-radius:10px;padding:.5rem}
-.enr-existante{display:flex;justify-content:space-between;align-items:center;
+.enr-existante{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;
   gap:.5rem;font-size:.9rem;padding:.2rem 0}
+.enr-recolter{border:none;background:none;color:#3f7a48;cursor:pointer;font:inherit;font-weight:600;text-decoration:underline}
+.enr-recolte .enr-label{flex-basis:100%;margin-top:0}
+.enr-recolte{flex-basis:100%;display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:.4rem}
+.enr-recolte input{flex:1;min-width:9rem}
 .enr-supprimer{border:none;background:none;color:#a4452c;cursor:pointer;
   font:inherit;font-size:.85rem;text-decoration:underline}
 @media (max-width:480px){

@@ -320,6 +320,23 @@ function deraciner(id) {
   return true;
 }
 
+/**
+ * Récolte. On ne supprime rien : la récolte s'ajoute à l'historique de
+ * l'instance. Une annuelle récoltée est terminée (elle libère la place) ;
+ * une vivace reste en place et accumule ses récoltes d'une année sur l'autre.
+ */
+function recolter(id, dateISO, { terminer = true } = {}) {
+  const i = INSTANCES.find(x => x.id === id);
+  if (!i) return null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateISO || "") ? dateISO : new Date().toISOString().slice(0, 10);
+  i.recoltes = Array.isArray(i.recoltes) ? i.recoltes : [];
+  i.recoltes.push(date);
+  if (terminer) { i.etat = "termine"; i.fin = date; }
+  i.maj = new Date().toISOString();
+  sauverInstances();
+  return i;
+}
+
 /** Toutes les instances d'une culture, ou tout le jardin si cultureId est omis. */
 function instancesDe(cultureId) {
   return cultureId ? INSTANCES.filter(i => i.cultureId === cultureId) : [...INSTANCES];
@@ -364,7 +381,7 @@ chargerOccupations();
 
 if (typeof window !== "undefined") {
   window.Instances = {
-    enraciner, majInstance, deraciner, instancesDe, estEnracinee,
+    enraciner, majInstance, deraciner, recolter, instancesDe, estEnracinee,
     culturesEnracinees, migrerAdoptees, charger: chargerInstances,
     definirZone, zone, zones: () => [...ZONES_JARDIN], environnementDe,
     occuper, terminerOccupation, supprimerOccupation, occupationsDe,

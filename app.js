@@ -508,7 +508,12 @@ function ouvrirEnracinement(cultureId) {
         <span class="enr-label">${t("enr.deja")}</span>
         ${existantes.map(i => `<div class="enr-existante">
           <span>${t("enr.etat." + i.etat)} · ${libelleDepuis(i)}</span>
-          <button type="button" class="enr-supprimer" data-instance="${i.id}">${t("enr.deraciner")}</button>
+          <button type="button" class="enr-recolter" data-instance="${i.id}">${t("enr.recolter")}</button>
+          <div class="enr-recolte" data-pour="${i.id}" hidden>
+            <label class="enr-label" for="enr-recolte-${i.id}">${t("enr.recolte.date")}</label>
+            <input type="date" id="enr-recolte-${i.id}" value="${dateISOAujourdhui()}" max="${dateISOAujourdhui()}" />
+            <button type="button" class="btn-principal enr-recolte-ok" data-instance="${i.id}">${t("enr.recolte.valider")}</button>
+          </div>
         </div>`).join("")}</div>` : ""}
       <p class="enr-question">${t("enr.etat.question", { nom })}</p>
       <div class="enr-chips" id="enr-etats">
@@ -550,8 +555,17 @@ function ouvrirEnracinement(cultureId) {
     if (e.key === "Escape" && p.isConnected) { fermer(); document.removeEventListener("keydown", esc); }
   });
 
-  p.querySelectorAll(".enr-supprimer").forEach(b => b.addEventListener("click", () => {
-    window.Instances.deraciner(b.dataset.instance);
+  // Récolter : la date du jour est proposée, modifiable avant validation.
+  p.querySelectorAll(".enr-recolter").forEach(b => b.addEventListener("click", () => {
+    const f = p.querySelector(`.enr-recolte[data-pour="${b.dataset.instance}"]`);
+    f.hidden = !f.hidden;
+    if (!f.hidden) f.querySelector("input")?.focus();
+  }));
+  p.querySelectorAll(".enr-recolte-ok").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.instance;
+    const date = p.querySelector(`#enr-recolte-${id}`)?.value || dateISOAujourdhui();
+    // Une vivace se récolte sans disparaître du jardin.
+    window.Instances.recolter(id, date, { terminer: plante.cycle !== "vivace" });
     synchroniserDepuisInstances();
     fermer(); rendre();
   }));
