@@ -263,10 +263,12 @@ function etapesCulture(plante, iso) {
         const auPlusTot = duree ? plus(duree) : null;
         if (auPlusTot && auPlusTot > fermeture) {
           // La culture n'aura pas le temps de mûrir avant la fin de la fenêtre.
+          // On donne quand même la date probable, avec l'avertissement : le
+          // jardinier peut être sous abri et la cueillir.
           etapes.push({
-            cle: "recolte", emoji: "⚠️", sansDate: true,
-            label: t("etape.troptard", { mois: Math.round(duree / 30.4), fin: moisNom(fin) }),
-            date: debut,
+            cle: "recolte", emoji: "⚠️",
+            label: t("etape.troptard", { fin: moisNom(fin) }),
+            date: auPlusTot,
           });
         } else {
           etapes.push({ cle: "recolte", emoji: "🧺", label: t("etape.debutrecolte"),
