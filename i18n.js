@@ -744,6 +744,7 @@ const I18N = {
   // Étapes
   "etape.recoltecours": { fr: "Récolte en cours (jusqu'à fin {mois})", en: "Harvest under way (until end of {mois})" },
   "etape.debutrecolte": { fr: "Début de récolte (estimation)", en: "Harvest start (estimate)" },
+  "etape.troptard": { fr: "Récolte peu probable cette saison : il faut environ {mois} mois depuis le semis, la fenêtre se ferme fin {fin}", en: "Harvest unlikely this season: it needs about {mois} months from sowing, the window closes at the end of {fin}" },
   "etape.horscalendrier": { fr: "Mise en place hors calendrier — récolte de référence {debut} → {fin}", en: "Planted outside the usual calendar — reference harvest {debut} → {fin}" },
   "etape.leveeattendue": { fr: "Levée attendue (~{n} jours)", en: "Germination expected (~{n} days)" },
   "etape.leveeattendue.range": { fr: "Levée attendue ({min} à {max} jours)", en: "Germination expected ({min} to {max} days)" },

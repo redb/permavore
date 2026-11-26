@@ -182,6 +182,23 @@ function moisFinRecolte(plante) {
   const index = MOIS_FR.findIndex(mois => fin.startsWith(normaliseVille(mois)));
   return index >= 0 ? index + 1 : null;
 }
+// Durée minimale semis → récolte IMPLICITE dans le calendrier de référence :
+// écart entre l'ouverture de la fenêtre de semis et celle de la fenêtre de
+// récolte (courge : mai → septembre ≈ 4 mois). Ce n'est pas une donnée
+// inventée : c'est ce que la fiche suppose déjà. Sans elle, un semis tardif
+// tombait sur « la prochaine ouverture de la fenêtre », soit parfois 15 jours.
+// Vivaces exclues : leur première récolte se compte en années, pas en mois.
+function dureeMinimaleJours(plante) {
+  if (plante.cycle === "vivace" || !Array.isArray(plante.semis) || !plante.semis.length) return null;
+  const moisR = moisRecolte(plante);
+  if (!moisR) return null;
+  const ecarts = plante.semis
+    .filter(f => Array.isArray(f) && Number.isFinite(f[0]))
+    .map(([debutSemis]) => (moisR - debutSemis + 12) % 12)
+    .filter(n => n > 0);
+  if (!ecarts.length) return null;
+  return Math.round(Math.min(...ecarts) * 30.4);
+}
 const CLE_MODE = ["semis", "plant", "tubercule", "caieu", "rhizome"];
 function libelleMode(mode) {
   return t("mode." + (CLE_MODE.includes(mode) ? mode : "semis"));
@@ -236,10 +253,25 @@ function etapesCulture(plante, iso) {
           date: debut,
         });
       } else {
-        // Sinon : prochaine ouverture de la fenêtre.
+        // Prochaine ouverture de la fenêtre, mais jamais avant la durée de
+        // culture minimale implicite.
         const annee = moisMiseEnPlace <= mois ? debut.getFullYear() : debut.getFullYear() + 1;
-        etapes.push({ cle: "recolte", emoji: "🧺",
-          label: t("etape.debutrecolte"), date: new Date(annee, mois - 1, 1) });
+        const ouverture = new Date(annee, mois - 1, 1);
+        // Dernier jour de la fenêtre (elle peut chevaucher l'année : sept. → mars).
+        const fermeture = new Date(fin >= mois ? annee : annee + 1, fin, 0);
+        const duree = dureeMinimaleJours(plante);
+        const auPlusTot = duree ? plus(duree) : null;
+        if (auPlusTot && auPlusTot > fermeture) {
+          // La culture n'aura pas le temps de mûrir avant la fin de la fenêtre.
+          etapes.push({
+            cle: "recolte", emoji: "⚠️", sansDate: true,
+            label: t("etape.troptard", { mois: Math.round(duree / 30.4), fin: moisNom(fin) }),
+            date: debut,
+          });
+        } else {
+          etapes.push({ cle: "recolte", emoji: "🧺", label: t("etape.debutrecolte"),
+            date: auPlusTot && auPlusTot > ouverture ? auPlusTot : ouverture });
+        }
       }
     }
   }
@@ -480,7 +512,7 @@ const DATES_PROPOSEES = ["exacte", "mois", "saison", "annee", "anneeApprox", "in
  * puis une date — « je ne sais pas » comprise. Le reste est facultatif et
  * replié.
  */
-function ouvrirEnracinement(cultureId) {
+function ouvrirEnracinement(cultureId, { recolte = false } = {}) {
   const plante = PLANTES.find(p => p.id === cultureId);
   if (!plante || !instancesDisponibles()) return;
   document.getElementById("enr-panneau")?.remove();
@@ -651,7 +683,14 @@ function ouvrirEnracinement(cultureId) {
     valider(annee ? "anneeApprox" : "inconnue", annee || null);
   });
 
-  p.querySelector("#enr-etats .enr-chip")?.focus();
+  const formRecolte = recolte ? p.querySelector(".enr-recolte") : null;
+  if (formRecolte) {
+    formRecolte.hidden = false;
+    formRecolte.scrollIntoView({ block: "nearest" });
+    formRecolte.querySelector("input")?.focus();
+  } else {
+    p.querySelector("#enr-etats .enr-chip")?.focus();
+  }
 }
 
 function basculerAdoption(id) {
@@ -1313,6 +1352,7 @@ function ouvrirModale(plante) {
         </label>
         <ul class="suivi-etapes" id="suivi-etapes"></ul>
         <p class="suivi-note">${t("modale.suivi.note")}</p>
+        ${instancesDisponibles() ? `<button type="button" class="btn-principal suivi-recolter" id="suivi-recolter">🧺 ${t("enr.recolter")}</button>` : ""}
       </div>` : ""}
 
       <div class="bloc">
@@ -1350,6 +1390,13 @@ function ouvrirModale(plante) {
     if (v) ouvrirSachet(v.dataset.sachet);
   };
   modale.addEventListener("click", modale._clicRot);
+
+  // Récolter depuis le suivi : on ferme la fiche et on ouvre le panneau
+  // d'enracinement, formulaire de récolte déjà déplié.
+  modale.querySelector("#suivi-recolter")?.addEventListener("click", () => {
+    fermerModale();
+    ouvrirEnracinement(plante.id, { recolte: true });
+  });
 
   // Suivi de culture : liste des étapes + changement de date
   const champDate = modale.querySelector("#suivi-date");
